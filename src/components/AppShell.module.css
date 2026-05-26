@@ -1,0 +1,243 @@
+.shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.sidebar {
+  width: 210px;
+  flex-shrink: 0;
+  background: #2C2C2A;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-md);
+  overflow-y: auto;
+}
+
+.sidebarLogo {
+  padding: var(--sp-md) var(--sp-md) var(--sp-sm);
+  border-bottom: 0.5px solid rgba(255,255,255,0.08);
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.logoMark { display: flex; align-items: baseline; }
+.ly  { color: #E8401A; font-size: 17px; font-weight: 500; font-family: var(--font); }
+.lou { color: #F5B800; font-size: 17px; font-weight: 500; font-family: var(--font); }
+.lt  { color: #ffffff; font-size: 17px; font-weight: 500; font-family: var(--font); }
+
+.logoSub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 3px;
+  font-family: var(--font);
+}
+
+.nav { flex: 1; padding: 0 8px; }
+
+.navSection {
+  font-size: 10px;
+  color: rgba(255,255,255,0.28);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: var(--sp-md) var(--sp-sm) 3px;
+  font-family: var(--font);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px var(--sp-sm);
+  color: rgba(255,255,255,0.55);
+  font-size: var(--fs-body);
+  font-family: var(--font);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  text-align: left;
+  margin: 2px 0;
+  transition: background 0.12s, color 0.12s;
+}
+.navItem:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
+.navItem i { font-size: 16px; }
+
+.navActive { background: rgba(232,64,26,0.22) !important; color: #fff !important; }
+.navActive i { color: #F47B20; }
+
+.navBadge {
+  margin-left: auto;
+  background: #E8401A;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.navBottom {
+  margin-top: auto;
+  border-top: 0.5px solid rgba(255,255,255,0.08);
+  padding: var(--sp-sm) 8px 0;
+  flex-shrink: 0;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #F5F0EE;
+  min-width: 0;
+}
+
+.topbar {
+  background: var(--bg-primary);
+  border-bottom: 0.5px solid var(--border-light);
+  padding: 0 var(--sp-lg);
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.pageTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  font-family: var(--font);
+}
+
+/* Logo shown in topbar on mobile only */
+.topbarLogo {
+  display: none;
+  align-items: baseline;
+  gap: 0;
+}
+.topbarLogoY  { color: #E8401A; font-size: 16px; font-weight: 500; font-family: var(--font); }
+.topbarLogoOu { color: #F5B800; font-size: 16px; font-weight: 500; font-family: var(--font); }
+.topbarLogoT  { color: #2C2C2A; font-size: 16px; font-weight: 500; font-family: var(--font); }
+
+.topbarRight { display: flex; align-items: center; gap: var(--sp-sm); }
+
+.roleBadge {
+  font-size: var(--fs-xs);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  font-family: var(--font);
+}
+.roleTeacher { background: rgba(232,64,26,0.12); color: #c93515; }
+.roleStudent  { background: rgba(245,184,0,0.18); color: #633806; }
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+  font-family: var(--font);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+/* ── Bottom nav (mobile only) ───────────────────────────────── */
+.bottomNav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #2C2C2A;
+  border-top: 0.5px solid rgba(255,255,255,0.1);
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottomNavInner {
+  display: flex;
+  height: 58px;
+}
+
+.bottomNavItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: rgba(255,255,255,0.4);
+  font-size: 9px;
+  font-family: var(--font);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 2px;
+  position: relative;
+  transition: color 0.12s;
+  letter-spacing: 0.01em;
+}
+.bottomNavItem i { font-size: 20px; line-height: 1; }
+.bottomNavItem:active { background: rgba(255,255,255,0.05); }
+
+.bottomNavActive { color: #fff !important; }
+.bottomNavActive i { color: #F47B20; }
+
+.bottomNavBadge {
+  position: absolute;
+  top: 5px;
+  left: calc(50% + 4px);
+  background: #E8401A;
+  color: #fff;
+  font-size: 9px;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  padding: 0 3px;
+}
+
+/* ── Mobile overrides ───────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar    { display: none; }
+  .bottomNav  { display: flex; flex-direction: column; }
+  .shell      { flex-direction: column; }
+
+  .topbar {
+    padding: 0 var(--sp-sm);
+    height: 48px;
+  }
+  .topbarLogo  { display: flex; }
+  .pageTitle   { display: none; }
+  .roleBadge   { display: none; }
+
+  .content {
+    padding: var(--sp-sm);
+    gap: var(--sp-sm);
+    /* leave room for fixed bottom nav */
+    padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px) + var(--sp-sm));
+  }
+}

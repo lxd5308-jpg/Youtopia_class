@@ -1,0 +1,180 @@
+.shell {
+  min-height: 100vh;
+  background: #1A1A1A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  background: #2C2C2A;
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-lg);
+  padding: 40px 44px 36px;
+  width: 100%;
+  max-width: 390px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logoWrap { text-align: center; margin-bottom: 4px; }
+
+.logoMark {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  line-height: 1;
+}
+
+.ly  { color: #E8401A; font-size: 28px; font-weight: 500; font-family: var(--font); }
+.lou { color: #F5B800; font-size: 28px; font-weight: 500; font-family: var(--font); }
+.lt  { color: #ffffff; font-size: 28px; font-weight: 500; font-family: var(--font); }
+
+.logoSub {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 4px;
+  font-family: var(--font);
+}
+
+.heading {
+  font-size: 19px;
+  font-weight: 500;
+  color: #ffffff;
+  text-align: center;
+  margin-top: 24px;
+  letter-spacing: -0.01em;
+  font-family: var(--font);
+}
+
+.sub {
+  font-size: var(--fs-body);
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin-top: 5px;
+  line-height: 1.5;
+  font-family: var(--font);
+}
+
+.roleSection { width: 100%; margin-top: 22px; }
+
+.roleLabel {
+  font-size: var(--fs-label);
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 9px;
+  font-family: var(--font);
+}
+
+.roleRow { display: flex; gap: 10px; }
+
+.roleCard {
+  flex: 1;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  padding: 16px 10px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.roleCard:hover { border-color: rgba(232, 64, 26, 0.6); }
+.roleCard.roleSel { border-color: #E8401A; background: rgba(232, 64, 26, 0.1); }
+.roleCard i { font-size: 22px; color: #E8401A; display: block; margin-bottom: 7px; }
+
+.roleName {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: #ffffff;
+  font-family: var(--font);
+}
+
+.roleSub {
+  font-size: var(--fs-xs);
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+  font-family: var(--font);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 22px;
+}
+.divider::before,
+.divider::after { content: ''; flex: 1; height: 0.5px; background: rgba(255, 255, 255, 0.12); }
+.divider span { font-size: var(--fs-xs); color: rgba(255, 255, 255, 0.4); font-family: var(--font); }
+
+.authBtn {
+  width: 100%;
+  padding: 10px 15px;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: var(--fs-body);
+  color: #ffffff;
+  font-family: var(--font);
+  transition: background 0.12s;
+  margin-top: 9px;
+}
+.authBtn:hover { background: rgba(255, 255, 255, 0.1); }
+.authBtn i { font-size: 18px; }
+
+.footer {
+  font-size: var(--fs-xs);
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
+  margin-top: 20px;
+  line-height: 1.5;
+  font-family: var(--font);
+}
+.footer a { color: #F47B20; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+.errorMsg {
+  width: 100%;
+  background: rgba(232, 64, 26, 0.1);
+  border: 0.5px solid rgba(232, 64, 26, 0.3);
+  border-radius: var(--r-sm);
+  color: #F47B20;
+  font-size: var(--fs-sm);
+  font-family: var(--font);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.authBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.footer {
+  font-size: var(--fs-xs);
+  color: rgba(255,255,255,0.35);
+  text-align: center;
+  margin-top: 16px;
+  line-height: 1.5;
+  font-family: var(--font);
+}
+.footer a { color: #F47B20; text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
