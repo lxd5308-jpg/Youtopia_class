@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SEMESTER } from '../../data/mockData'
 
 const LEAVE_STATUS = {
@@ -19,7 +19,18 @@ export default function StudentDashboard({
   submitLeave, requestMakeup, studentLoading,
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
-  const [editingName, setEditingName] = useState(!studentName)
+  const [editingName, setEditingName] = useState(false)
+
+  // When Firestore loads the saved name, update local state
+  useEffect(() => {
+    if (studentName) {
+      setNameInput(studentName)
+      setEditingName(false)
+    } else if (!studentLoading) {
+      // Firestore loaded and no name found — show the prompt
+      setEditingName(true)
+    }
+  }, [studentName, studentLoading])
   const [loggingPack, setLoggingPack] = useState({})
 
   // Leave request state (keyed by classId)
