@@ -132,11 +132,46 @@ Return ONLY the JSON array. Example: [{"name":"Level 3 C3","category":"kids","da
 
 const CAT_LABEL = { kids:'少儿部 — Kids', adult:'成人部 — Adult', comp:'Competition Team' }
 
+const BLANK_CLASS = () => ({
+  id: Date.now() + Math.random(),
+  name:'', category:'kids', days:'', time:'', duration:'', fee:0, sessions:0, instructor:'', color: COLORS[0],
+})
+
 // ─────────────────────────────────────────────────────────────
 export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails }) {
   const [newEmail, setNewEmail]   = useState('')
   const [emailErr, setEmailErr]   = useState('')
   const [emailSaved, setEmailSaved] = useState(false)
+
+  // ── Class management state ──────────────────────────────────
+  const [editingId,  setEditingId]    = useState(null)   // id of class being edited
+  const [editDraft,  setEditDraft]    = useState({})     // draft fields while editing
+  const [addingNew,  setAddingNew]    = useState(false)
+  const [newClass,   setNewClass]     = useState(BLANK_CLASS())
+  const [clsFlash,   setClsFlash]     = useState(null)   // id of recently saved class
+
+  function startEdit(cls) {
+    setEditingId(cls.id)
+    setEditDraft({ ...cls })
+  }
+  function cancelEdit() { setEditingId(null); setEditDraft({}) }
+  function saveEdit() {
+    setClasses(prev => prev.map(c => c.id === editingId ? { ...c, ...editDraft } : c))
+    setClsFlash(editingId)
+    setTimeout(() => setClsFlash(null), 2000)
+    setEditingId(null); setEditDraft({})
+  }
+  function deleteClass(id) {
+    if (!window.confirm('Delete this class? This cannot be undone.')) return
+    setClasses(prev => prev.filter(c => c.id !== id))
+  }
+  function saveNewClass() {
+    if (!newClass.name.trim()) return
+    const cls = { ...newClass, id: Date.now(), color: COLORS[classes.length % COLORS.length] }
+    setClasses(prev => [...prev, cls])
+    setNewClass(BLANK_CLASS())
+    setAddingNew(false)
+  }
 
   const [dragging, setDragging]       = useState(false)
   const [gsUrl, setGsUrl]             = useState('')
@@ -249,6 +284,162 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
 
   return (
     <>
+      {/* ── Manage classes ─────────────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr">
+          <span className="card-title">Manage classes</span>
+          <button className="btn btn-p" onClick={() => { setAddingNew(true); setEditingId(null) }}
+            style={{fontSize:'var(--fs-xs)'}}>
+            <i className="ti ti-plus" /> Add class
+          </button>
+        </div>
+
+        {/* Add new class form */}
+        {addingNew && (
+          <div style={{background:'rgba(232,64,26,0.04)',border:'0.5px solid rgba(232,64,26,0.2)',borderRadius:'var(--r-sm)',padding:'var(--sp-md)',marginBottom:'var(--sp-md)'}}>
+            <div style={{fontWeight:500,fontSize:'var(--fs-body)',marginBottom:'var(--sp-sm)'}}>New class</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'var(--sp-sm)',marginBottom:'var(--sp-sm)'}}>
+              <div className="form-grp">
+                <label className="form-label">Class name *</label>
+                <input type="text" value={newClass.name} onChange={e=>setNewClass(p=>({...p,name:e.target.value}))} placeholder="e.g. Level 3 C3" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Category</label>
+                <select value={newClass.category} onChange={e=>setNewClass(p=>({...p,category:e.target.value}))}>
+                  <option value="kids">少儿部 — Kids</option>
+                  <option value="adult">成人部 — Adult</option>
+                  <option value="comp">Competition Team</option>
+                </select>
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Day(s)</label>
+                <input type="text" value={newClass.days} onChange={e=>setNewClass(p=>({...p,days:e.target.value}))} placeholder="e.g. 周二 Tue" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Time</label>
+                <input type="text" value={newClass.time} onChange={e=>setNewClass(p=>({...p,time:e.target.value}))} placeholder="e.g. 6:00pm–8:00pm" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Fee per session ($)</label>
+                <input type="number" value={newClass.fee} onChange={e=>setNewClass(p=>({...p,fee:Number(e.target.value)}))} min="0" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Total sessions</label>
+                <input type="number" value={newClass.sessions} onChange={e=>setNewClass(p=>({...p,sessions:Number(e.target.value)}))} min="0" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Instructor</label>
+                <input type="text" value={newClass.instructor} onChange={e=>setNewClass(p=>({...p,instructor:e.target.value}))} placeholder="e.g. 楚濛" />
+              </div>
+              <div className="form-grp">
+                <label className="form-label">Duration</label>
+                <input type="text" value={newClass.duration} onChange={e=>setNewClass(p=>({...p,duration:e.target.value}))} placeholder="e.g. 2hr" />
+              </div>
+            </div>
+            <div style={{display:'flex',gap:'var(--sp-sm)',justifyContent:'flex-end'}}>
+              <button className="btn" onClick={() => { setAddingNew(false); setNewClass(BLANK_CLASS()) }}>Cancel</button>
+              <button className="btn btn-p" onClick={saveNewClass} disabled={!newClass.name.trim()}>
+                <i className="ti ti-check" /> Save class
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Class list grouped by category */}
+        {classes.length === 0 ? (
+          <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
+            No classes yet. Click "Add class" or upload a schedule below.
+          </div>
+        ) : ['kids','adult','comp'].map(cat => {
+          const catClasses = classes.filter(c => c.category === cat)
+          if (!catClasses.length) return null
+          return (
+            <div key={cat} style={{marginBottom:'var(--sp-md)'}}>
+              <div style={{fontSize:'var(--fs-xs)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',color:'var(--color-text-secondary)',padding:'var(--sp-sm) 0 4px',borderBottom:'0.5px solid var(--color-border-tertiary)',marginBottom:4}}>
+                {CAT_LABEL[cat]}
+              </div>
+              {catClasses.map(cls => {
+                const isEditing = editingId === cls.id
+                const d = isEditing ? editDraft : cls
+                return (
+                  <div key={cls.id} style={{padding:'10px 0',borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
+                    {isEditing ? (
+                      <>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'var(--sp-sm)',marginBottom:'var(--sp-sm)'}}>
+                          <div>
+                            <label className="form-label">Class name</label>
+                            <input type="text" value={d.name} onChange={e=>setEditDraft(p=>({...p,name:e.target.value}))} />
+                          </div>
+                          <div>
+                            <label className="form-label">Day(s)</label>
+                            <input type="text" value={d.days} onChange={e=>setEditDraft(p=>({...p,days:e.target.value}))} />
+                          </div>
+                          <div>
+                            <label className="form-label">Time</label>
+                            <input type="text" value={d.time} onChange={e=>setEditDraft(p=>({...p,time:e.target.value}))} />
+                          </div>
+                          <div>
+                            <label className="form-label">Instructor</label>
+                            <input type="text" value={d.instructor} onChange={e=>setEditDraft(p=>({...p,instructor:e.target.value}))} />
+                          </div>
+                          <div>
+                            <label className="form-label">Fee ($)</label>
+                            <input type="number" value={d.fee} onChange={e=>setEditDraft(p=>({...p,fee:Number(e.target.value)}))} min="0" />
+                          </div>
+                          <div>
+                            <label className="form-label">Sessions</label>
+                            <input type="number" value={d.sessions} onChange={e=>setEditDraft(p=>({...p,sessions:Number(e.target.value)}))} min="0" />
+                          </div>
+                          <div>
+                            <label className="form-label">Duration</label>
+                            <input type="text" value={d.duration} onChange={e=>setEditDraft(p=>({...p,duration:e.target.value}))} />
+                          </div>
+                          <div>
+                            <label className="form-label">Category</label>
+                            <select value={d.category} onChange={e=>setEditDraft(p=>({...p,category:e.target.value}))}>
+                              <option value="kids">少儿部 — Kids</option>
+                              <option value="adult">成人部 — Adult</option>
+                              <option value="comp">Competition Team</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                          <button className="btn" onClick={cancelEdit}>Cancel</button>
+                          <button className="btn btn-p" onClick={saveEdit}>
+                            <i className="ti ti-check" /> Save changes
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <div style={{width:8,height:8,borderRadius:'50%',background:cls.color,flexShrink:0}} />
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:500,fontSize:'var(--fs-body)'}}>{cls.name}</div>
+                          <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',marginTop:2}}>
+                            {cls.days}{cls.time ? ` · ${cls.time}` : ''}{cls.instructor ? ` · ${cls.instructor}` : ''}
+                            {cls.fee ? ` · $${cls.fee}/session` : ''}{cls.sessions ? ` · ${cls.sessions} sessions` : ''}
+                          </div>
+                        </div>
+                        {clsFlash === cls.id && (
+                          <span style={{fontSize:'var(--fs-xs)',color:'#27500A'}}><i className="ti ti-check" /> Saved</span>
+                        )}
+                        <button className="btn" style={{fontSize:11,padding:'3px 8px'}} onClick={() => startEdit(cls)}>
+                          <i className="ti ti-pencil" /> Edit
+                        </button>
+                        <button className="btn" style={{fontSize:11,padding:'3px 8px',color:'#791F1F',borderColor:'#791F1F'}}
+                          onClick={() => deleteClass(cls.id)}>
+                          <i className="ti ti-trash" /> Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+
       {/* ── Teacher access ─────────────────────────────────── */}
       <div className="card">
         <div className="card-hdr"><span className="card-title">Teacher portal access</span></div>
