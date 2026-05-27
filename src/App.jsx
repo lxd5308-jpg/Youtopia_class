@@ -233,11 +233,14 @@ export default function App() {
   function updateStudentDoc(updater) {
     setSd(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
+      // Write to Firestore outside React's render cycle using a microtask
       if (studentEmailRef.current) {
         const encoded = encEmail(studentEmailRef.current)
-        // leaveRequests live in the /leaveRequests collection — don't store in student doc
         const { leaveRequests, ...toStore } = next
-        setDoc(doc(db, 'students', encoded), toStore, { merge: true })
+        Promise.resolve().then(() => {
+          setDoc(doc(db, 'students', encoded), toStore, { merge: true })
+            .catch(err => console.error('Firestore student write failed:', err))
+        })
       }
       return next
     })
