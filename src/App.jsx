@@ -39,11 +39,12 @@ const defaultTeacher = () => ({
 })
 
 export default function App() {
-  const [user, setUser]       = useState(null)
-  const [td,   setTd]         = useState(defaultTeacher())
-  const [sd,   setSd]         = useState(defaultStudent())
-  const studentEmailRef       = useRef(null)
-  const studentUnsubRef       = useRef(null)
+  const [user, setUser]           = useState(null)
+  const [td,   setTd]             = useState(defaultTeacher())
+  const [sd,   setSd]             = useState(defaultStudent())
+  const [studentLoading, setStudentLoading] = useState(false)
+  const studentEmailRef           = useRef(null)
+  const studentUnsubRef           = useRef(null)
 
   // ── Global Firestore listeners (always on) ─────────────────────
   useEffect(() => {
@@ -128,6 +129,8 @@ export default function App() {
           readMessageIds: data.readMessageIds ?? prev.readMessageIds,
         }))
       }
+      // Mark profile as loaded (whether doc exists or not)
+      setStudentLoading(false)
     })
 
     const unsubLeaves = onSnapshot(
@@ -509,6 +512,7 @@ export default function App() {
       const email = loggedInUser.email || loggedInUser.name || 'guest'
       studentEmailRef.current = email
       setSd(defaultStudent())
+      setStudentLoading(true)
       const cleanup = setupStudentListeners(email)
       studentUnsubRef.current = cleanup
     }
@@ -539,6 +543,7 @@ export default function App() {
       teacherSessionPacks={td.sessionPacks}
       teacherPayHistory={td.paymentHistory}  setTeacherPayHist={setTeacherPayHist}
       sentMessages={td.sentMessages}
+      studentLoading={studentLoading}
       studentName={sd.studentName}           setStudentName={setStudentName}
       cart={sd.cart}                         setCart={setCart}
       enrolled={sd.enrolled}                 setEnrolled={setEnrolled}

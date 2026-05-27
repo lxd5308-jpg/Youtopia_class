@@ -16,7 +16,7 @@ const MK_STATUS = {
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
   leaveRequests=[], studentName, setStudentName, user, logSession,
-  submitLeave, requestMakeup,
+  submitLeave, requestMakeup, studentLoading,
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
   const [editingName, setEditingName] = useState(!studentName)
@@ -98,8 +98,8 @@ export default function StudentDashboard({
 
   return (
     <>
-      {/* ── Student name prompt ── */}
-      {editingName && (
+      {/* ── Student name prompt (only show after Firestore has loaded) ── */}
+      {editingName && !studentLoading && (
         <div className="card" style={{background:'rgba(232,64,26,0.04)', border:'1.5px solid rgba(232,64,26,0.25)'}}>
           <div className="card-hdr">
             <span className="card-title">👋 Welcome! What is your student's name?</span>
