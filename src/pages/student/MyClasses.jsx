@@ -22,6 +22,7 @@ export default function MyClasses({
 
   // Session pack logging state
   const [loggingPack,    setLoggingPack]    = useState({})
+  const [selHours,       setSelHours]       = useState({})
 
   const myClasses  = classes.filter(c => enrolledIds.has(c.id))
   const pendingCls = classes.filter(c => pendingIds.has(c.id) && !enrolledIds.has(c.id))
@@ -75,8 +76,9 @@ export default function MyClasses({
 
   // ── Session pack helpers ──────────────────────────────────────
   function handleLogSession(packId) {
+    const hours = Number(selHours[packId] || 1)
     setLoggingPack(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name)
+    logSession(packId, user?.email, user?.name, hours)
     setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
   }
 
@@ -356,9 +358,9 @@ export default function MyClasses({
 
       {/* ── 10-session packs ────────────────────────────────── */}
       {allPacks.length > 0 && allPacks.map((pack, i) => {
-        const used  = pack.sessionsUsed || 0
-        const left  = 10 - used
-        const pct   = Math.round((used / 10) * 100)
+        const used  = parseFloat((pack.sessionsUsed || 0).toFixed(1))
+        const left  = parseFloat(Math.max(0, 10 - used).toFixed(1))
+        const pct   = Math.min(Math.round((used / 10) * 100), 100)
         const color = pct >= 90 ? '#E24B4A' : pct >= 70 ? '#F47B20' : '#E8401A'
         const done  = used >= 10
         const log   = pack.sessionLog || []
@@ -366,7 +368,7 @@ export default function MyClasses({
         return (
           <div className="card" key={pack.id || i}>
             <div className="card-hdr">
-              <span className="card-title">10-session pack</span>
+              <span className="card-title">10-hour pack</span>
               <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>
                 Purchased {pack.purchaseDate} · ${pack.total}
               </span>
@@ -374,43 +376,28 @@ export default function MyClasses({
 
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
               <div style={{ fontSize:'var(--fs-body)' }}>
-                <span style={{ fontWeight:500, color }}>{left}</span>
-                <span style={{ color:'var(--color-text-secondary)' }}> sessions remaining</span>
+                <span style={{ fontWeight:500, color }}>{left} hr{left !== 1 ? 's' : ''}</span>
+                <span style={{ color:'var(--color-text-secondary)' }}> remaining</span>
               </div>
-              <div style={{ fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)' }}>{used} / 10 used</div>
+              <div style={{ fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)' }}>{used} / 10 hrs used</div>
             </div>
 
             <div style={{ background:'var(--color-background-secondary)', borderRadius:4, height:10, marginBottom:'var(--sp-md)', overflow:'hidden' }}>
               <div style={{ width:`${pct}%`, height:10, borderRadius:4, background:color, transition:'width 0.3s' }} />
             </div>
 
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:'var(--sp-md)' }}>
-              {Array.from({ length:10 }).map((_, idx) => (
-                <div key={idx} title={log[idx]?.date || ''} style={{
-                  width:30, height:30, borderRadius:'50%',
-                  background: idx < used ? color : 'var(--color-background-secondary)',
-                  border: `1.5px solid ${idx < used ? color : 'var(--color-border-secondary)'}`,
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize:11, color: idx < used ? '#fff' : 'var(--color-text-secondary)',
-                  fontWeight:500, cursor: log[idx] ? 'help' : 'default',
-                }}>
-                  {idx < used ? <i className="ti ti-check" style={{ fontSize:12 }} /> : idx + 1}
-                </div>
-              ))}
-            </div>
-
             {log.length > 0 && (
               <div style={{ marginBottom:'var(--sp-md)' }}>
                 <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'var(--color-text-secondary)', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:6 }}>
-                  Session history
+                  Hour log
                 </div>
                 <div style={{ background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)' }}>
                   {log.map((entry, j) => (
                     <div key={j} style={{ display:'flex', alignItems:'center', gap:10, padding:'4px 0', borderBottom: j < log.length - 1 ? '0.5px solid var(--color-border-tertiary)' : 'none' }}>
                       <div style={{ width:20, height:20, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                        <i className="ti ti-check" style={{ fontSize:10, color:'#fff' }} />
+                        <i className="ti ti-clock" style={{ fontSize:10, color:'#fff' }} />
                       </div>
-                      <span style={{ fontSize:'var(--fs-sm)', fontFamily:'var(--font)' }}>Session {j + 1}</span>
+                      <span style={{ fontSize:'var(--fs-sm)' }}>{entry.hours || 1} hr{(entry.hours||1) !== 1 ? 's' : ''}</span>
                       <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', whiteSpace:'nowrap' }}>{entry.date}</span>
                     </div>
                   ))}
@@ -421,18 +408,25 @@ export default function MyClasses({
             {done ? (
               <div style={{ background:'rgba(163,45,45,0.08)', border:'0.5px solid rgba(163,45,45,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-sm)', color:'#791F1F', lineHeight:1.6 }}>
                 <i className="ti ti-package-off" style={{ marginRight:6 }} />
-                All 10 sessions used. Purchase a new pack to continue.
+                All 10 hours used. Purchase a new pack to continue.
               </div>
             ) : (
               <div style={{ display:'flex', gap:'var(--sp-sm)', alignItems:'center', flexWrap:'wrap' }}>
+                <select className="sel-sm" value={selHours[pack.id] || 1}
+                  onChange={e => setSelHours(h => ({...h, [pack.id]: e.target.value}))}>
+                  <option value={0.5}>0.5 hr</option>
+                  <option value={1}>1 hr</option>
+                  <option value={1.5}>1.5 hr</option>
+                  <option value={2}>2 hr</option>
+                </select>
                 <button className="btn btn-p" disabled={loggingPack[pack.id]} onClick={() => handleLogSession(pack.id)}>
                   {loggingPack[pack.id]
                     ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }} /> Logging…</>
-                    : <><i className="ti ti-plus" /> Log a session</>
+                    : <><i className="ti ti-clock" /> Log hours</>
                   }
                 </button>
                 <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', lineHeight:1.5 }}>
-                  Tap after each class to track your sessions.
+                  Log hours after each class to track toward 10 hrs.
                 </div>
               </div>
             )}

@@ -338,14 +338,15 @@ export default function App() {
   }
 
   // ── logSession ─────────────────────────────────────────────────
-  async function logSession(packId, studentEmail, studentName) {
-    const entry = { date: nowStr() }
+  async function logSession(packId, studentEmail, studentName, hours = 1) {
+    const entry = { date: nowStr(), hours }
+    const addHours = (prev) => parseFloat(Math.min((prev||0) + hours, 10).toFixed(1))
 
     // Optimistic update for the logged-in student
     setSd(d => ({ ...d, sessionPacks: d.sessionPacks.map(p =>
       p.id === packId ? {
         ...p,
-        sessionsUsed: Math.min((p.sessionsUsed||0)+1, 10),
+        sessionsUsed: addHours(p.sessionsUsed),
         sessionLog:   [...(p.sessionLog||[]), entry],
       } : p
     )}))
@@ -359,7 +360,7 @@ export default function App() {
         const updatedPacks = (data.sessionPacks||[]).map(p =>
           p.id === packId ? {
             ...p,
-            sessionsUsed: Math.min((p.sessionsUsed||0)+1, 10),
+            sessionsUsed: addHours(p.sessionsUsed),
             sessionLog:   [...(p.sessionLog||[]), entry],
           } : p
         )
@@ -374,8 +375,8 @@ export default function App() {
       const pd = packSnap.data()
       await setDoc(packRef, {
         ...pd,
-        sessionsUsed: Math.min((pd.sessionsUsed||0)+1, 10),
-        sessionLog:   [...(pd.sessionLog||[]), { date: entry.date, studentName: studentName||studentEmail }],
+        sessionsUsed: addHours(pd.sessionsUsed),
+        sessionLog:   [...(pd.sessionLog||[]), { date: entry.date, hours, studentName: studentName||studentEmail }],
       })
     }
   }

@@ -32,6 +32,7 @@ export default function StudentDashboard({
     }
   }, [studentName, studentLoading])
   const [loggingPack, setLoggingPack] = useState({})
+  const [selHours, setSelHours]       = useState({})
 
   // Leave request state (keyed by classId)
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)
@@ -50,8 +51,9 @@ export default function StudentDashboard({
   const activePacks          = (sessionPacks||[]).filter(p => (p.sessionsUsed||0) < 10)
 
   function handleLogSession(packId) {
+    const hours = Number(selHours[packId] || 1)
     setLoggingPack(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name)
+    logSession(packId, user?.email, user?.name, hours)
     setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
   }
 
@@ -156,10 +158,10 @@ export default function StudentDashboard({
           <div className="stat-sub">{enrolledClasses.length===0 ? 'Sign up below' : 'This semester'}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">10-session packs</div>
+          <div className="stat-label">10-hour packs</div>
           <div className="stat-val">{activePacks.length}</div>
           <div className="stat-sub">
-            {activePacks.length===0 ? 'None active' : `${activePacks.reduce((s,p)=>s+(10-(p.sessionsUsed||0)),0)} sessions left`}
+            {activePacks.length===0 ? 'None active' : `${parseFloat(activePacks.reduce((s,p)=>s+(10-(p.sessionsUsed||0)),0).toFixed(1))} hrs left`}
           </div>
         </div>
         <div className="stat-card">
@@ -427,57 +429,72 @@ export default function StudentDashboard({
         })}
       </div>
 
-      {/* ── 10-session packs ── */}
+      {/* ── 10-hour packs ── */}
       {activePacks.length>0 && (
         <div className="card">
-          <div className="card-hdr"><span className="card-title">My 10-session packs</span></div>
+          <div className="card-hdr"><span className="card-title">My 10-hour packs</span></div>
           {activePacks.map((pack,i) => {
-            const used=pack.sessionsUsed||0, left=10-used, pct=Math.round((used/10)*100)
-            const color=pct>=90?'#E24B4A':pct>=70?'#F47B20':'#E8401A'
-            const done=used>=10
-            const log=pack.sessionLog||[]
+            const used = parseFloat((pack.sessionsUsed||0).toFixed(1))
+            const left = parseFloat((10-used).toFixed(1))
+            const pct  = Math.min(Math.round((used/10)*100), 100)
+            const color = pct>=90?'#E24B4A':pct>=70?'#F47B20':'#E8401A'
+            const done  = used >= 10
+            const log   = pack.sessionLog || []
             return (
               <div key={pack.id||i} style={{padding:'10px 0',borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                   <div>
-                    <div style={{fontWeight:500}}>10-session pack</div>
+                    <div style={{fontWeight:500}}>10-hour pack</div>
                     <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>Purchased {pack.purchaseDate} · ${pack.total}</div>
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:'var(--fs-sm)',fontWeight:500,color}}>{left} left</div>
-                    <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>{used}/10 used</div>
+                    <div style={{fontSize:'var(--fs-sm)',fontWeight:500,color}}>{left} hrs left</div>
+                    <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>{used}/10 hrs used</div>
                   </div>
                 </div>
+                {/* Progress bar */}
                 <div style={{background:'var(--color-background-secondary)',borderRadius:4,height:6,marginBottom:8}}>
                   <div style={{width:`${pct}%`,height:6,borderRadius:4,background:color,transition:'width 0.3s'}} />
                 </div>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
-                  {Array.from({length:10}).map((_,idx) => (
-                    <div key={idx} title={log[idx]?.date||''} style={{
-                      width:24,height:24,borderRadius:'50%',
-                      background:idx<used?color:'var(--color-background-secondary)',
-                      border:`1.5px solid ${idx<used?color:'var(--color-border-secondary)'}`,
-                      display:'flex',alignItems:'center',justifyContent:'center',
-                      fontSize:9,color:idx<used?'#fff':'var(--color-text-secondary)',fontWeight:500,
-                    }}>
-                      {idx<used ? <i className="ti ti-check" style={{fontSize:10}} /> : idx+1}
-                    </div>
-                  ))}
-                </div>
+                {/* Session history */}
+                {log.length > 0 && (
+                  <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-xs) var(--sp-sm)',marginBottom:8}}>
+                    <div style={{fontSize:'var(--fs-xs)',fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>History</div>
+                    {log.map((entry,j) => (
+                      <div key={j} style={{display:'flex',justifyContent:'space-between',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',padding:'2px 0'}}>
+                        <span style={{color:'var(--color-text-primary)'}}>Session {j+1}</span>
+                        <span>{entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} · {entry.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {done ? (
-                  <div style={{fontSize:'var(--fs-xs)',color:'#791F1F'}}>All 10 sessions used. Purchase a new pack to continue.</div>
+                  <div style={{fontSize:'var(--fs-xs)',color:'#791F1F'}}>All 10 hours used. Purchase a new pack to continue.</div>
                 ) : (
-                  <button
-                    className="btn btn-p"
-                    style={{fontSize:'var(--fs-xs)',padding:'5px 12px'}}
-                    disabled={loggingPack[pack.id]}
-                    onClick={() => handleLogSession(pack.id)}
-                  >
-                    {loggingPack[pack.id]
-                      ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Logging…</>
-                      : <><i className="ti ti-plus" /> Log a session</>
-                    }
-                  </button>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <select
+                      className="sel-sm"
+                      value={selHours[pack.id] || 1}
+                      onChange={e => setSelHours(h => ({...h, [pack.id]: e.target.value}))}
+                      style={{fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                    >
+                      <option value={0.5}>0.5 hr</option>
+                      <option value={1}>1 hr</option>
+                      <option value={1.5}>1.5 hr</option>
+                      <option value={2}>2 hr</option>
+                    </select>
+                    <button
+                      className="btn btn-p"
+                      style={{fontSize:'var(--fs-xs)',padding:'5px 12px'}}
+                      disabled={loggingPack[pack.id]}
+                      onClick={() => handleLogSession(pack.id)}
+                    >
+                      {loggingPack[pack.id]
+                        ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Logging…</>
+                        : <><i className="ti ti-plus" /> Log hours</>
+                      }
+                    </button>
+                  </div>
                 )}
               </div>
             )
