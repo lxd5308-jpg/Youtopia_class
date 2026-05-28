@@ -4,7 +4,7 @@ import {
   doc, collection, onSnapshot, setDoc, getDoc, addDoc,
   query, where,
 } from 'firebase/firestore'
-import LoginPage from './pages/LoginPage'
+import PublicPage from './pages/PublicPage'
 import AppShell from './components/AppShell'
 import { CLASSES } from './data/mockData'
 
@@ -531,7 +531,7 @@ export default function App() {
   }
 
   // ── Render ─────────────────────────────────────────────────────
-  if (!user) return <LoginPage onLogin={handleLogin} teacherEmails={td.teacherEmails} />
+  if (!user) return <PublicPage classes={td.classes} onLogin={handleLogin} teacherEmails={td.teacherEmails} />
 
   return (
     <AppShell
