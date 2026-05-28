@@ -527,11 +527,12 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
 // 10-SESSION PACKS TAB
 // ─────────────────────────────────────────────────────────────
 function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
-  const [logging,   setLogging]   = useState({})
-  const [selHours,  setSelHours]  = useState({})
+  const [logging,  setLogging]  = useState({})
+  const [selMins,  setSelMins]  = useState({})
 
   function handleLog(packId) {
-    const hours = Number(selHours[packId] || 1)
+    const mins  = Number(selMins[packId] || 60)
+    const hours = parseFloat((mins / 60).toFixed(2))
     setLogging(l => ({ ...l, [packId]: true }))
     logSession(packId, user?.email, user?.name, hours)
     setTimeout(() => setLogging(l => ({ ...l, [packId]: false })), 800)
@@ -607,13 +608,16 @@ function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
               </div>
             ) : (
               <div style={{display:'flex', gap:'var(--sp-sm)', alignItems:'center', flexWrap:'wrap'}}>
-                <select className="sel-sm" value={selHours[pack.id] || 1}
-                  onChange={e => setSelHours(h => ({...h, [pack.id]: e.target.value}))}>
-                  <option value={0.5}>0.5 hr</option>
-                  <option value={1}>1 hr</option>
-                  <option value={1.5}>1.5 hr</option>
-                  <option value={2}>2 hr</option>
-                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={600}
+                  placeholder="60"
+                  value={selMins[pack.id] ?? ''}
+                  onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
+                  style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
+                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
                 <button
                   className="btn btn-p"
                   disabled={logging[pack.id]}

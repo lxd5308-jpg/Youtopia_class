@@ -32,7 +32,7 @@ export default function StudentDashboard({
     }
   }, [studentName, studentLoading])
   const [loggingPack, setLoggingPack] = useState({})
-  const [selHours, setSelHours]       = useState({})
+  const [selMins, setSelMins]         = useState({})
 
   // Leave request state (keyed by classId)
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)
@@ -51,7 +51,8 @@ export default function StudentDashboard({
   const activePacks          = (sessionPacks||[]).filter(p => (p.sessionsUsed||0) < 10)
 
   function handleLogSession(packId) {
-    const hours = Number(selHours[packId] || 1)
+    const mins  = Number(selMins[packId] || 60)
+    const hours = parseFloat((mins / 60).toFixed(2))
     setLoggingPack(l => ({ ...l, [packId]: true }))
     logSession(packId, user?.email, user?.name, hours)
     setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
@@ -472,17 +473,16 @@ export default function StudentDashboard({
                   <div style={{fontSize:'var(--fs-xs)',color:'#791F1F'}}>All 10 hours used. Purchase a new pack to continue.</div>
                 ) : (
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                    <select
-                      className="sel-sm"
-                      value={selHours[pack.id] || 1}
-                      onChange={e => setSelHours(h => ({...h, [pack.id]: e.target.value}))}
-                      style={{fontSize:'var(--fs-xs)',padding:'4px 8px'}}
-                    >
-                      <option value={0.5}>0.5 hr</option>
-                      <option value={1}>1 hr</option>
-                      <option value={1.5}>1.5 hr</option>
-                      <option value={2}>2 hr</option>
-                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      max={600}
+                      placeholder="60"
+                      value={selMins[pack.id] ?? ''}
+                      onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
+                      style={{width:80,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                    />
+                    <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>min</span>
                     <button
                       className="btn btn-p"
                       style={{fontSize:'var(--fs-xs)',padding:'5px 12px'}}

@@ -22,7 +22,7 @@ export default function MyClasses({
 
   // Session pack logging state
   const [loggingPack,    setLoggingPack]    = useState({})
-  const [selHours,       setSelHours]       = useState({})
+  const [selMins,        setSelMins]        = useState({})
 
   const myClasses  = classes.filter(c => enrolledIds.has(c.id))
   const pendingCls = classes.filter(c => pendingIds.has(c.id) && !enrolledIds.has(c.id))
@@ -76,7 +76,8 @@ export default function MyClasses({
 
   // ── Session pack helpers ──────────────────────────────────────
   function handleLogSession(packId) {
-    const hours = Number(selHours[packId] || 1)
+    const mins  = Number(selMins[packId] || 60)
+    const hours = parseFloat((mins / 60).toFixed(2))
     setLoggingPack(l => ({ ...l, [packId]: true }))
     logSession(packId, user?.email, user?.name, hours)
     setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
@@ -412,13 +413,16 @@ export default function MyClasses({
               </div>
             ) : (
               <div style={{ display:'flex', gap:'var(--sp-sm)', alignItems:'center', flexWrap:'wrap' }}>
-                <select className="sel-sm" value={selHours[pack.id] || 1}
-                  onChange={e => setSelHours(h => ({...h, [pack.id]: e.target.value}))}>
-                  <option value={0.5}>0.5 hr</option>
-                  <option value={1}>1 hr</option>
-                  <option value={1.5}>1.5 hr</option>
-                  <option value={2}>2 hr</option>
-                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={600}
+                  placeholder="60"
+                  value={selMins[pack.id] ?? ''}
+                  onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
+                  style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
+                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
                 <button className="btn btn-p" disabled={loggingPack[pack.id]} onClick={() => handleLogSession(pack.id)}>
                   {loggingPack[pack.id]
                     ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }} /> Logging…</>
