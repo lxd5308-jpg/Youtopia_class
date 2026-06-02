@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { db } from './firebase'
+import { db } from './config/firebase'
 import {
   doc, collection, onSnapshot, setDoc, getDoc, addDoc,
   query, where,
 } from 'firebase/firestore'
 import LoginPage from './pages/LoginPage'
 import AppShell from './components/AppShell'
-import { CLASSES } from './data/mockData'
+import { CLASSES, SEMESTER } from './data/mockData'
 
 const applyFn  = (v, prev) => typeof v === 'function' ? v(prev) : v
 const nowStr   = () => new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -14,15 +14,19 @@ const dateStr  = () => new Date().toLocaleDateString('en-US', { month:'short', d
 const encEmail = (email) => encodeURIComponent(email)
 
 const defaultStudent = () => ({
-  studentName:    '',
-  cart:           [],
-  enrolled:       [],
-  pendingEnroll:  [],
-  sessionPacks:   [],
-  leaveRequests:  [],
-  paymentHistory: [],
-  messages:       [],
-  readMessageIds: [],
+  studentName:          '',
+  cart:                 [],
+  enrolled:             [],
+  pendingEnroll:        [],
+  sessionPacks:         [],
+  leaveRequests:        [],
+  paymentHistory:       [],
+  messages:             [],
+  readMessageIds:       [],
+  enrolledSemesterId:   '',
+  enrolledSemesterName: '',
+  enrolledSemesterEnd:  '',
+  enrollmentHistory:    [],
 })
 
 const defaultTeacher = () => ({
@@ -36,6 +40,7 @@ const defaultTeacher = () => ({
   sentMessages:   [],
   studentInbox:   [],
   emailConfig:    { serviceId:'', templateId:'', publicKey:'' },
+  semester:       { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
 })
 
 export default function App() {
@@ -57,6 +62,7 @@ export default function App() {
           classes:       data.classes       || prev.classes,
           teacherEmails: data.teacherEmails || prev.teacherEmails,
           emailConfig:   data.emailConfig   || prev.emailConfig,
+          semester:      data.semester      || prev.semester,
         }))
       } else {
         // First-time setup: seed defaults
@@ -64,6 +70,7 @@ export default function App() {
           classes:       CLASSES,
           teacherEmails: ['summerli634@gmail.com', 'info@youtopiadanceacademy.com'],
           emailConfig:   { serviceId:'', templateId:'', publicKey:'' },
+          semester:      { id: `sem_${Date.now()}`, name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
         })
       }
     })
@@ -110,6 +117,53 @@ export default function App() {
     }
   }, [])
 
+  // ── Auto-archive: move old semester enrollments to history on login ──
+  useEffect(() => {
+    const currentSemId = td.semester?.id
+    if (!studentEmailRef.current) return   // no student logged in
+    if (!currentSemId) return              // settings not loaded yet
+    if (studentLoading) return             // student data still loading
+
+    if (!sd.enrolledSemesterId) {
+      // Brand-new student — just stamp their record with the current semester ID
+      if ((sd.enrolled?.length ?? 0) > 0 || (sd.pendingEnroll?.length ?? 0) > 0) {
+        updateStudentDoc(d => ({
+          ...d,
+          enrolledSemesterId:   currentSemId,
+          enrolledSemesterName: td.semester?.name    || '',
+          enrolledSemesterEnd:  td.semester?.endDate || '',
+        }))
+      }
+      return
+    }
+
+    if (sd.enrolledSemesterId === currentSemId) return  // same semester — nothing to do
+
+    // Semester has changed → archive old enrolled classes into history
+    const oldClasses = (td.classes || [])
+      .filter(c => (sd.enrolled || []).includes(c.id))
+      .map(({ id, name, days, time, duration, instructor, fee, color }) =>
+        ({ id, name, days, time, duration, instructor, fee, color }))
+
+    const historyEntry = {
+      semesterId:   sd.enrolledSemesterId,
+      semesterName: sd.enrolledSemesterName || 'Past Semester',
+      semesterEnd:  sd.enrolledSemesterEnd  || '',
+      classes:      oldClasses,
+      archivedAt:   dateStr(),
+    }
+
+    updateStudentDoc(d => ({
+      ...d,
+      enrolled:             [],
+      pendingEnroll:        [],
+      enrolledSemesterId:   currentSemId,
+      enrolledSemesterName: td.semester?.name    || '',
+      enrolledSemesterEnd:  td.semester?.endDate || '',
+      enrollmentHistory:    [...(d.enrollmentHistory || []), historyEntry],
+    }))
+  }, [td.semester?.id, sd.enrolledSemesterId, studentLoading])  // eslint-disable-line
+
   // ── Student Firestore listeners (active while student is logged in) ─
   function setupStudentListeners(email) {
     const encoded = encEmail(email)
@@ -119,14 +173,18 @@ export default function App() {
         const data = snap.data()
         setSd(prev => ({
           ...prev,
-          studentName:    data.studentName    ?? prev.studentName,
-          cart:           data.cart           ?? prev.cart,
-          enrolled:       data.enrolled       ?? prev.enrolled,
-          pendingEnroll:  data.pendingEnroll  ?? prev.pendingEnroll,
-          sessionPacks:   data.sessionPacks   ?? prev.sessionPacks,
-          paymentHistory: data.paymentHistory ?? prev.paymentHistory,
-          messages:       data.messages       ?? prev.messages,
-          readMessageIds: data.readMessageIds ?? prev.readMessageIds,
+          studentName:          data.studentName          ?? prev.studentName,
+          cart:                 data.cart                 ?? prev.cart,
+          enrolled:             data.enrolled             ?? prev.enrolled,
+          pendingEnroll:        data.pendingEnroll        ?? prev.pendingEnroll,
+          sessionPacks:         data.sessionPacks         ?? prev.sessionPacks,
+          paymentHistory:       data.paymentHistory       ?? prev.paymentHistory,
+          messages:             data.messages             ?? prev.messages,
+          readMessageIds:       data.readMessageIds       ?? prev.readMessageIds,
+          enrolledSemesterId:   data.enrolledSemesterId   ?? prev.enrolledSemesterId,
+          enrolledSemesterName: data.enrolledSemesterName ?? prev.enrolledSemesterName,
+          enrolledSemesterEnd:  data.enrolledSemesterEnd  ?? prev.enrolledSemesterEnd,
+          enrollmentHistory:    data.enrollmentHistory    ?? prev.enrollmentHistory,
         }))
       }
       // Mark profile as loaded (whether doc exists or not)
@@ -167,6 +225,19 @@ export default function App() {
       setDoc(doc(db, 'settings', 'main'), { emailConfig }, { merge: true })
       return { ...prev, emailConfig }
     })
+  }
+
+  const setSemester = (v) => {
+    setTd(prev => {
+      const semester = applyFn(v, prev.semester)
+      setDoc(doc(db, 'settings', 'main'), { semester }, { merge: true })
+      return { ...prev, semester }
+    })
+  }
+
+  // Teacher starts a new semester: give it a fresh ID so students auto-archive on next login
+  const archiveSemester = (newSemData) => {
+    setSemester({ id: `sem_${Date.now()}`, ...newSemData })
   }
 
   // Handles both student adds (new payment) and teacher status updates
@@ -296,12 +367,15 @@ export default function App() {
     }
     const newSessionPacks = [...(existing.sessionPacks||[]), ...newPacks]
 
-    // Update student Firestore doc
+    // Update student Firestore doc (tag with current semester)
     await setDoc(studentRef, {
       ...existing,
-      enrolled:      newEnrolled,
-      pendingEnroll: newPending,
-      sessionPacks:  newSessionPacks,
+      enrolled:             newEnrolled,
+      pendingEnroll:        newPending,
+      sessionPacks:         newSessionPacks,
+      enrolledSemesterId:   td.semester?.id      || existing.enrolledSemesterId || '',
+      enrolledSemesterName: td.semester?.name    || existing.enrolledSemesterName || '',
+      enrolledSemesterEnd:  td.semester?.endDate || existing.enrolledSemesterEnd  || '',
     }, { merge: true })
 
     // Reflect in local student state if they're currently logged in
@@ -537,6 +611,7 @@ export default function App() {
     <AppShell
       user={user} onLogout={handleLogout}
       classes={td.classes}               setClasses={setClasses}
+      semester={td.semester}             setSemester={setSemester}  archiveSemester={archiveSemester}
       teacherEmails={td.teacherEmails}   setTeacherEmails={setTeacherEmails}
       pendingPayments={td.pendingPayments}   setPendingPayments={setPendingPayments}
       teacherLeaves={td.leaveRequests}       setTeacherLeaves={setTeacherLeaves}
@@ -550,6 +625,7 @@ export default function App() {
       enrolled={sd.enrolled}                 setEnrolled={setEnrolled}
       pendingEnroll={sd.pendingEnroll||[]}   setPendingEnroll={setPendingEnroll}
       sessionPacks={sd.sessionPacks}         setSessionPacks={setSessionPacks}
+      enrollmentHistory={sd.enrollmentHistory||[]}
       leaveRequests={sd.leaveRequests}       setLeaveRequests={setLeaveRequests}
       paymentHistory={sd.paymentHistory}     setPaymentHistory={setPaymentHistory}
       studentMessages={sd.messages}

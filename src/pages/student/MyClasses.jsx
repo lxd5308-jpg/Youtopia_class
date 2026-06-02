@@ -5,7 +5,9 @@ export default function MyClasses({
   sessionPacks=[], logSession,
   leaveRequests=[],
   navigate, user, studentName, submitLeave, requestMakeup,
+  enrollmentHistory=[], semester={},
 }) {
+  const [tab, setTab] = useState('current')
   const enrolledIds = new Set(enrolled)
   const pendingIds  = new Set(pendingEnroll||[])
 
@@ -118,8 +120,84 @@ export default function MyClasses({
     )
   }
 
+  const semesterEnded = semester?.endDate ? new Date() > new Date(semester.endDate) : false
+
   return (
     <>
+      {/* ── Tab bar ──────────────────────────────────────────── */}
+      <div style={{display:'flex',borderBottom:'1.5px solid var(--color-border-secondary)',marginBottom:'var(--sp-md)'}}>
+        {[
+          { id:'current', label:'Current' },
+          { id:'history', label:`History${enrollmentHistory.length>0 ? ` (${enrollmentHistory.length})` : ''}` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding:'10px 20px', border:'none', background:'none', cursor:'pointer',
+            fontWeight: tab===t.id ? 600 : 400,
+            color: tab===t.id ? '#E8401A' : 'var(--color-text-secondary)',
+            borderBottom: tab===t.id ? '2px solid #E8401A' : '2px solid transparent',
+            fontSize:'var(--fs-body)', fontFamily:'var(--font)', marginBottom:-1.5,
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Semester ended banner ─────────────────────────────── */}
+      {tab==='current' && semesterEnded && (
+        <div style={{background:'rgba(245,184,0,0.08)',border:'1px solid rgba(245,184,0,0.35)',borderRadius:'var(--r-md)',padding:'var(--sp-md) var(--sp-lg)',marginBottom:'var(--sp-md)',display:'flex',alignItems:'flex-start',gap:12}}>
+          <i className="ti ti-calendar-off" style={{fontSize:20,color:'#F5B800',flexShrink:0,marginTop:2}} />
+          <div>
+            <div style={{fontWeight:500,color:'#633806',marginBottom:3}}>
+              The {semester?.name} semester has ended
+            </div>
+            <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',lineHeight:1.6}}>
+              Your classes from this semester are being archived. The teacher will open registration for the next semester soon — check back to browse and enroll in new classes.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'history' ? (
+        /* ── History tab ─────────────────────────────────────── */
+        enrollmentHistory.length === 0 ? (
+          <div className="card" style={{textAlign:'center',padding:'var(--sp-xl)'}}>
+            <i className="ti ti-clock-history" style={{fontSize:36,display:'block',marginBottom:'var(--sp-sm)',opacity:.4,color:'var(--color-text-secondary)'}} />
+            <div style={{fontSize:'var(--fs-body)',fontWeight:500,marginBottom:8}}>No history yet</div>
+            <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',lineHeight:1.6}}>
+              Past semester enrollments will appear here once a new semester begins.
+            </div>
+          </div>
+        ) : (
+          [...enrollmentHistory].reverse().map((sem, i) => (
+            <div key={sem.semesterId||i} className="card">
+              <div className="card-hdr">
+                <span className="card-title">{sem.semesterName || 'Past Semester'}</span>
+                {sem.semesterEnd && (
+                  <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
+                    Ended {new Date(sem.semesterEnd).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                  </span>
+                )}
+              </div>
+              {sem.classes?.length > 0 ? sem.classes.map(c => (
+                <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
+                  <span className="dot" style={{background:c.color||'#E8401A',flexShrink:0}} />
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:500,fontSize:'var(--fs-body)'}}>{c.name}</div>
+                    <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',marginTop:2}}>
+                      {c.days}{c.time ? ` · ${c.time}` : ''}{c.instructor ? ` · ${c.instructor}` : ''}{c.fee ? ` · $${c.fee}/sess` : ''}
+                    </div>
+                  </div>
+                  <span className="pill" style={{fontSize:10,background:'var(--color-background-secondary)',color:'var(--color-text-secondary)'}}>Past</span>
+                </div>
+              )) : (
+                <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)'}}>No classes recorded for this semester.</div>
+              )}
+            </div>
+          ))
+        )
+      ) : (
+      /* ── Current tab ─────────────────────────────────────── */
+      <>
       {/* ── My enrolled classes ──────────────────────────────── */}
       <div className="card">
         <div className="card-hdr">
@@ -450,6 +528,8 @@ export default function MyClasses({
             {' '}and the teacher will activate it once payment is confirmed.
           </div>
         </div>
+      )}
+      </>
       )}
     </>
   )

@@ -138,7 +138,19 @@ const BLANK_CLASS = () => ({
 })
 
 // ─────────────────────────────────────────────────────────────
-export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails }) {
+const fmtDate = (s) => {
+  if (!s) return '—'
+  try { return new Date(s).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) }
+  catch { return s }
+}
+
+export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester }) {
+  // ── Semester state ──────────────────────────────────────────
+  const [semDraft,    setSemDraft]    = useState(null)   // null=view, object=editing
+  const [semFlash,    setSemFlash]    = useState(false)
+  const [newSemForm,  setNewSemForm]  = useState(false)
+  const [newSemDraft, setNewSemDraft] = useState({ name:'', startDate:'', endDate:'' })
+
   const [newEmail, setNewEmail]   = useState('')
   const [emailErr, setEmailErr]   = useState('')
   const [emailSaved, setEmailSaved] = useState(false)
@@ -284,6 +296,109 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
 
   return (
     <>
+      {/* ── Semester / Term ────────────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr">
+          <span className="card-title">📅 Current semester</span>
+          {!semDraft && !newSemForm && (
+            <button className="btn" style={{fontSize:'var(--fs-xs)'}} onClick={() => setSemDraft({...semester})}>
+              <i className="ti ti-pencil" /> Edit dates
+            </button>
+          )}
+        </div>
+
+        {semDraft ? (
+          /* ── Edit mode ── */
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'var(--sp-sm)',marginBottom:'var(--sp-md)'}}>
+              <div>
+                <label className="form-label">Semester name</label>
+                <input value={semDraft.name||''} onChange={e=>setSemDraft(d=>({...d,name:e.target.value}))} placeholder="e.g. Jan–Jun 2026" />
+              </div>
+              <div>
+                <label className="form-label">Start date</label>
+                <input type="date" value={semDraft.startDate||''} onChange={e=>setSemDraft(d=>({...d,startDate:e.target.value}))} />
+              </div>
+              <div>
+                <label className="form-label">End date</label>
+                <input type="date" value={semDraft.endDate||''} onChange={e=>setSemDraft(d=>({...d,endDate:e.target.value}))} />
+              </div>
+            </div>
+            <div style={{display:'flex',gap:'var(--sp-sm)'}}>
+              <button className="btn" onClick={() => setSemDraft(null)}>Cancel</button>
+              <button className="btn btn-p" onClick={() => {
+                setSemester({...semester,...semDraft})
+                setSemDraft(null)
+                setSemFlash(true)
+                setTimeout(() => setSemFlash(false), 2500)
+              }}>
+                <i className="ti ti-check" /> Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ── View mode ── */
+          <div>
+            <div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:6}}>
+              <div style={{fontSize:16,fontWeight:600}}>{semester?.name || '—'}</div>
+              {semFlash && <span style={{fontSize:'var(--fs-xs)',color:'#27500A'}}><i className="ti ti-check" /> Saved</span>}
+            </div>
+            <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)'}}>
+              {fmtDate(semester?.startDate)} → {fmtDate(semester?.endDate)}
+            </div>
+          </div>
+        )}
+
+        {/* ── Start new semester ── */}
+        {!semDraft && (
+          <div style={{marginTop:'var(--sp-lg)',paddingTop:'var(--sp-md)',borderTop:'0.5px solid var(--color-border-tertiary)'}}>
+            <div style={{fontWeight:500,fontSize:'var(--fs-body)',marginBottom:4}}>Start a new semester</div>
+            <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
+              When a new semester begins, students' current enrollments are automatically archived and they can re-enroll in new classes.
+            </div>
+            {!newSemForm ? (
+              <button className="btn btn-p" style={{fontSize:'var(--fs-xs)'}} onClick={() => setNewSemForm(true)}>
+                <i className="ti ti-player-skip-forward" /> Start new semester →
+              </button>
+            ) : (
+              <div style={{background:'rgba(232,64,26,0.04)',border:'0.5px solid rgba(232,64,26,0.25)',borderRadius:'var(--r-sm)',padding:'var(--sp-md)'}}>
+                <div style={{fontWeight:500,marginBottom:'var(--sp-sm)'}}>New semester details</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'var(--sp-sm)',marginBottom:'var(--sp-sm)'}}>
+                  <div>
+                    <label className="form-label">Semester name *</label>
+                    <input value={newSemDraft.name} onChange={e=>setNewSemDraft(d=>({...d,name:e.target.value}))} placeholder="e.g. Sep–Dec 2026" />
+                  </div>
+                  <div>
+                    <label className="form-label">Start date *</label>
+                    <input type="date" value={newSemDraft.startDate} onChange={e=>setNewSemDraft(d=>({...d,startDate:e.target.value}))} />
+                  </div>
+                  <div>
+                    <label className="form-label">End date *</label>
+                    <input type="date" value={newSemDraft.endDate} onChange={e=>setNewSemDraft(d=>({...d,endDate:e.target.value}))} />
+                  </div>
+                </div>
+                <div style={{background:'rgba(245,184,0,0.1)',border:'0.5px solid rgba(245,184,0,0.4)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'#633806',marginBottom:'var(--sp-sm)',lineHeight:1.6}}>
+                  <i className="ti ti-alert-triangle" style={{marginRight:5}} />
+                  This will archive all students' current enrollments. Students will need to re-enroll for the new semester. This cannot be undone.
+                </div>
+                <div style={{display:'flex',gap:'var(--sp-sm)'}}>
+                  <button className="btn" onClick={() => { setNewSemForm(false); setNewSemDraft({name:'',startDate:'',endDate:''}) }}>Cancel</button>
+                  <button className="btn btn-p"
+                    disabled={!newSemDraft.name.trim() || !newSemDraft.startDate || !newSemDraft.endDate}
+                    onClick={() => {
+                      archiveSemester(newSemDraft)
+                      setNewSemForm(false)
+                      setNewSemDraft({name:'',startDate:'',endDate:''})
+                    }}>
+                    <i className="ti ti-check" /> Confirm new semester
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── Manage classes ─────────────────────────────────── */}
       <div className="card">
         <div className="card-hdr">
