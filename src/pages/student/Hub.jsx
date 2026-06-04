@@ -542,15 +542,21 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
 // 10-SESSION PACKS TAB
 // ─────────────────────────────────────────────────────────────
 function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
-  const [logging,  setLogging]  = useState({})
-  const [selMins,  setSelMins]  = useState({})
+  const [logging,    setLogging]    = useState({})
+  const [selMins,    setSelMins]    = useState({})
+  const [selTeacher, setSelTeacher] = useState({})
 
   function handleLog(packId) {
-    const mins  = Number(selMins[packId] || 60)
-    const hours = parseFloat((mins / 60).toFixed(2))
+    const mins    = Number(selMins[packId] || 60)
+    const hours   = parseFloat((mins / 60).toFixed(2))
+    const teacher = (selTeacher[packId] || '').trim()
     setLogging(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name, hours)
-    setTimeout(() => setLogging(l => ({ ...l, [packId]: false })), 800)
+    logSession(packId, user?.email, user?.name, hours, teacher)
+    setTimeout(() => {
+      setLogging(l => ({ ...l, [packId]: false }))
+      setSelMins(m => ({ ...m, [packId]: '' }))
+      setSelTeacher(t => ({ ...t, [packId]: '' }))
+    }, 800)
   }
 
   if (sessionPacks.length === 0) return (
@@ -608,6 +614,9 @@ function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
                         <i className="ti ti-clock" style={{fontSize:10, color:'#fff'}} />
                       </div>
                       <span style={{fontSize:'var(--fs-sm)'}}>{entry.hours || 1} hr{(entry.hours||1) !== 1 ? 's' : ''}</span>
+                      {entry.teacher && (
+                        <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>· {entry.teacher}</span>
+                      )}
                       <span style={{marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', whiteSpace:'nowrap'}}>{entry.date}</span>
                     </div>
                   ))}
@@ -633,6 +642,13 @@ function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
                   style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
                 />
                 <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
+                <input
+                  type="text"
+                  placeholder="Teacher (optional)"
+                  value={selTeacher[pack.id] ?? ''}
+                  onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
+                  style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
                 <button
                   className="btn btn-p"
                   disabled={logging[pack.id]}

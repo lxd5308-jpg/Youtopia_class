@@ -90,13 +90,16 @@ export default function Packages({ classes=[], enrollments=[], teacherSessionPac
                       {log.length > 0 && (
                         <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-xs) var(--sp-sm)',marginBottom:8}}>
                           <div style={{fontSize:'var(--fs-xs)',fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:6}}>Hours history</div>
-                          <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto',gap:'4px 10px'}}>
+                          <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto auto auto',gap:'4px 10px'}}>
                             {log.map((entry,j) => (
                               <>
                                 <div key={`dot-${j}`} style={{width:18,height:18,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',alignSelf:'center'}}>
                                   <i className="ti ti-check" style={{fontSize:9,color:'#fff'}} />
                                 </div>
                                 <span key={`lbl-${j}`} style={{fontSize:'var(--fs-xs)',alignSelf:'center',color:'var(--color-text-primary)'}}>Session {j+1}</span>
+                                <span key={`tch-${j}`} style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',alignSelf:'center',whiteSpace:'nowrap'}}>
+                                  {entry.teacher || '—'}
+                                </span>
                                 <span key={`hrs-${j}`} style={{fontSize:'var(--fs-xs)',color:color,fontWeight:500,whiteSpace:'nowrap',alignSelf:'center'}}>
                                   {entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'}
                                 </span>

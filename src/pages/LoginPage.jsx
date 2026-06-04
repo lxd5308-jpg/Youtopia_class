@@ -109,7 +109,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
 
         <p className={styles.footer}>
           Teacher access requires an approved account.{' '}
-          <a href="mailto:info@youtopiadanceacademy.com">Request teacher access</a>
+          <a href="mailto:yating8697@gmail.com">Request teacher access</a>
         </p>
       </div>
     </div>

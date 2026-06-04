@@ -444,8 +444,8 @@ export default function App() {
   }
 
   // ── logSession ─────────────────────────────────────────────────
-  async function logSession(packId, studentEmail, studentName, hours = 1) {
-    const entry = { date: nowStr(), hours }
+  async function logSession(packId, studentEmail, studentName, hours = 1, teacher = '') {
+    const entry = { date: nowStr(), hours, ...(teacher ? { teacher } : {}) }
     const addHours = (prev) => parseFloat(Math.min((prev||0) + hours, 10).toFixed(1))
 
     // Optimistic update for the logged-in student
@@ -482,7 +482,7 @@ export default function App() {
       await setDoc(packRef, {
         ...pd,
         sessionsUsed: addHours(pd.sessionsUsed),
-        sessionLog:   [...(pd.sessionLog||[]), { date: entry.date, hours, studentName: studentName||studentEmail }],
+        sessionLog:   [...(pd.sessionLog||[]), { date: entry.date, hours, studentName: studentName||studentEmail, ...(teacher ? { teacher } : {}) }],
       })
     }
   }

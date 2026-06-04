@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { SEMESTER } from '../../data/mockData'
 
 const LEAVE_STATUS = {
@@ -19,9 +19,20 @@ export default function StudentDashboard({
   submitLeave, requestMakeup, studentLoading, pendingPayments=[],
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
-  const [editingName, setEditingName] = useState(!studentName)
+  const [editingName, setEditingName] = useState(false)
+
+  // Only prompt for name if loading finishes and no name is set yet
+  useEffect(() => {
+    if (!studentLoading && !studentName) setEditingName(true)
+  }, [studentLoading, studentName])
+
+  // Sync input when name loads from Firestore
+  useEffect(() => {
+    if (studentName) setNameInput(studentName)
+  }, [studentName])
   const [loggingPack, setLoggingPack] = useState({})
   const [selMins, setSelMins]         = useState({})
+  const [selTeacher, setSelTeacher]   = useState({})
 
   // Leave request state (keyed by classId)
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)
@@ -46,11 +57,16 @@ export default function StudentDashboard({
   const activePacks          = (sessionPacks||[]).filter(p => (p.sessionsUsed||0) < 10)
 
   function handleLogSession(packId) {
-    const mins  = Number(selMins[packId] || 60)
-    const hours = parseFloat((mins / 60).toFixed(2))
+    const mins    = Number(selMins[packId] || 60)
+    const hours   = parseFloat((mins / 60).toFixed(2))
+    const teacher = (selTeacher[packId] || '').trim()
     setLoggingPack(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name, hours)
-    setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
+    logSession(packId, user?.email, user?.name, hours, teacher)
+    setTimeout(() => {
+      setLoggingPack(l => ({ ...l, [packId]: false }))
+      setSelMins(m => ({ ...m, [packId]: '' }))
+      setSelTeacher(t => ({ ...t, [packId]: '' }))
+    }, 800)
   }
 
   function saveName() {
@@ -476,7 +492,9 @@ export default function StudentDashboard({
                     <div style={{fontSize:'var(--fs-xs)',fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>History</div>
                     {log.map((entry,j) => (
                       <div key={j} style={{display:'flex',justifyContent:'space-between',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',padding:'2px 0'}}>
-                        <span style={{color:'var(--color-text-primary)'}}>Session {j+1}</span>
+                        <span style={{color:'var(--color-text-primary)'}}>
+                          Session {j+1}{entry.teacher ? <span style={{fontWeight:400,color:'var(--color-text-secondary)'}}> · {entry.teacher}</span> : ''}
+                        </span>
                         <span>{entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} · {entry.date}</span>
                       </div>
                     ))}
@@ -496,6 +514,13 @@ export default function StudentDashboard({
                       style={{width:80,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
                     />
                     <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>min</span>
+                    <input
+                      type="text"
+                      placeholder="Teacher (optional)"
+                      value={selTeacher[pack.id] ?? ''}
+                      onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
+                      style={{width:140,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                    />
                     <button
                       className="btn btn-p"
                       style={{fontSize:'var(--fs-xs)',padding:'5px 12px'}}
