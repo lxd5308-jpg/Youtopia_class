@@ -9,7 +9,7 @@ export const SEMESTER = {
     { date: 'May 23, 2026 (Sat)', label: 'School Performance' },
   ],
   makeUpPolicy: '3 free make-up classes per semester. Same level/type only. Cannot carry over to next semester.',
-  packagePolicy: '10-session packs expire 3 months from purchase. Unused sessions cannot carry over.',
+  packagePolicy: '10-hour packs expire 3 months from purchase. Unused hours cannot carry over.',
   paymentNote: 'Zelle: Youtopia Dance Academy, LLC · Check: Youtopia Dance Academy · Please note student name and class. Send receipt screenshot to WeChat to confirm.',
   registrationFee: 20,
   studioRental: 70,

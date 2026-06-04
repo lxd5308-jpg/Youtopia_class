@@ -6,6 +6,7 @@ export default function Schedule({
   classes=[], cart=[], setCart,
   enrolled=[], pendingEnroll=[],
   navigate, user, studentName, signUpForClasses,
+  addClassToCart, addPackToCart,
 }) {
   const cartIds     = new Set(cart.map(i => i.classId))
   const enrolledIds = new Set(enrolled)
@@ -13,8 +14,13 @@ export default function Schedule({
 
   function addToCart(cls) {
     if (cartIds.has(cls.id) || enrolledIds.has(cls.id) || pendingIds.has(cls.id)) return
-    setCart(c => [...c, { classId:cls.id, packageType:'full' }])
-    if (signUpForClasses) signUpForClasses([cls.id])
+    if (addClassToCart) {
+      addClassToCart(cls)
+    } else {
+      // fallback
+      setCart(c => [...c, { classId:cls.id, packageType:'full' }])
+      if (signUpForClasses) signUpForClasses([cls.id])
+    }
   }
 
   const grouped = {}
@@ -46,6 +52,8 @@ export default function Schedule({
             const isEnrolled = enrolledIds.has(c.id)
             const inCart     = cartIds.has(c.id)
             const isPending  = pendingIds.has(c.id)
+            const cartPkg    = inCart ? (cart.find(i => i.classId === c.id)?.packageType || 'full') : null
+            const PKG_LABEL  = { full:'Full semester', '10pack':'10-class pack', dropin:'Drop-in' }
             return (
               <div className="row" key={c.id} style={{ gap:12 }}>
                 <span className="dot" style={{ background:c.color }} />
@@ -66,8 +74,9 @@ export default function Schedule({
                   : isPending
                     ? <span className="pill pill-warn">Pending</span>
                     : inCart
-                      ? <button className="btn" style={{ fontSize:11, padding:'4px 10px', color:'#E8401A', borderColor:'#E8401A' }} onClick={() => navigate('shub')}>
+                      ? <button className="btn" style={{ fontSize:11, padding:'4px 10px', color:'#E8401A', borderColor:'#E8401A', lineHeight:1.3 }} onClick={() => navigate('shub')}>
                           <i className="ti ti-shopping-cart" /> In cart
+                          <div style={{ fontSize:9, opacity:.8 }}>{PKG_LABEL[cartPkg]}</div>
                         </button>
                       : <button className="btn btn-p" style={{ fontSize:11, padding:'4px 10px' }} onClick={() => addToCart(c)}>
                           <i className="ti ti-plus" /> Sign up
@@ -78,6 +87,40 @@ export default function Schedule({
           })}
         </div>
       ))}
+
+      {/* ── Packages & Drop-in ───────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr"><span className="card-title">Packages</span></div>
+
+        {/* 10-session pack */}
+        {(() => {
+          const inCart = cart.some(i => i.classId === '__10pack__')
+          return (
+            <div className="row" style={{ gap:12 }}>
+              <span className="dot" style={{ background:'#F5B800' }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:'var(--fs-body)', fontWeight:500 }}>10-hour pack</div>
+              </div>
+              <div style={{ textAlign:'right', flexShrink:0 }}>
+                <div style={{ fontSize:'var(--fs-sm)', fontWeight:500 }}>fee × 10</div>
+                <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>e.g. $380 adult</div>
+              </div>
+              {inCart
+                ? <button className="btn" style={{ fontSize:11, padding:'4px 10px', color:'#E8401A', borderColor:'#E8401A' }} onClick={() => navigate('shub')}>
+                    <i className="ti ti-shopping-cart" /> In cart
+                  </button>
+                : <button className="btn btn-p" style={{ fontSize:11, padding:'4px 10px' }} onClick={() => {
+                    if (addPackToCart) addPackToCart(); else setCart(c => [...c, { classId:'__10pack__', packageType:'10pack' }])
+                    navigate('shub')
+                  }}>
+                    <i className="ti ti-plus" /> Sign up
+                  </button>
+              }
+            </div>
+          )
+        })()}
+
+      </div>
 
       {/* ── Private Lessons ───────────────────────────────── */}
       <div className="card">
@@ -100,7 +143,7 @@ export default function Schedule({
           onClick={() => navigate('shub')}
         >
           <div>
-            <div style={{ fontWeight:500 }}>🛒 {cart.length} class{cart.length > 1 ? 'es' : ''} in cart</div>
+            <div style={{ fontWeight:500 }}>🛒 {cart.length} item{cart.length > 1 ? 's' : ''} in cart</div>
             <div style={{ fontSize:'var(--fs-xs)', opacity:.85 }}>Click to review and checkout</div>
           </div>
           <i className="ti ti-arrow-right" style={{ fontSize:20 }} />

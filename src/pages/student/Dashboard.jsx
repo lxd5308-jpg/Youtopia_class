@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { SEMESTER } from '../../data/mockData'
 
 const LEAVE_STATUS = {
@@ -16,27 +16,17 @@ const MK_STATUS = {
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
   leaveRequests=[], studentName, setStudentName, user, logSession,
-  submitLeave, requestMakeup, studentLoading,
+  submitLeave, requestMakeup, studentLoading, pendingPayments=[],
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
-  const [editingName, setEditingName] = useState(false)
-
-  // When Firestore loads the saved name, update local state
-  useEffect(() => {
-    if (studentName) {
-      setNameInput(studentName)
-      setEditingName(false)
-    } else if (!studentLoading) {
-      // Firestore loaded and no name found — show the prompt
-      setEditingName(true)
-    }
-  }, [studentName, studentLoading])
+  const [editingName, setEditingName] = useState(!studentName)
   const [loggingPack, setLoggingPack] = useState({})
   const [selMins, setSelMins]         = useState({})
 
   // Leave request state (keyed by classId)
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)
   const [leaveReason,    setLeaveReason]    = useState('')
+  const [leaveDate,      setLeaveDate]      = useState('')
   const [leaveSubmitted, setLeaveSubmitted] = useState({})
 
   // Makeup request state (keyed by leaveId)
@@ -45,6 +35,11 @@ export default function StudentDashboard({
   const [mkDate,        setMkDate]        = useState('')
   const [mkSubmitted,   setMkSubmitted]   = useState({})
 
+  const pendingPackPayments  = (pendingPayments||[]).filter(p =>
+    (p.studentEmail === (user?.email||'') || p.studentName === (studentName||'')) &&
+    p.status === 'pending' &&
+    (p.items||[]).some(i => i.pkgType === '10pack')
+  )
   const enrolledClasses      = classes.filter(c => enrolled.includes(c.id))
   const pendingEnrollClasses = classes.filter(c => pendingEnroll.includes(c.id) && !enrolled.includes(c.id))
   const pendingLeaves        = leaveRequests.filter(r => r.status==='pending')
@@ -68,6 +63,7 @@ export default function StudentDashboard({
   function openLeaveForm(classId) {
     setLeaveFormFor(classId)
     setLeaveReason('')
+    setLeaveDate('')
   }
 
   function handleSubmitLeave(cls) {
@@ -78,6 +74,7 @@ export default function StudentDashboard({
       studentEmail: user?.email || '',
       className:    cls.name,
       reason:       leaveReason.trim(),
+      sessionDate:  leaveDate || '',
       date:         new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
       status:       'pending',
     }
@@ -113,7 +110,7 @@ export default function StudentDashboard({
   return (
     <>
       {/* ── Student name prompt (only show after Firestore has loaded) ── */}
-      {editingName && !studentLoading && (
+      {editingName && (
         <div className="card" style={{background:'rgba(232,64,26,0.04)', border:'1.5px solid rgba(232,64,26,0.25)'}}>
           <div className="card-hdr">
             <span className="card-title">👋 Welcome! What is your student's name?</span>
@@ -177,8 +174,8 @@ export default function StudentDashboard({
         <div onClick={() => navigate('shub')} style={{background:'rgba(232,64,26,0.08)',border:'1px solid rgba(232,64,26,0.25)',borderRadius:'var(--r-md)',padding:'var(--sp-md) var(--sp-lg)',display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
           <i className="ti ti-shopping-cart" style={{fontSize:20,color:'#E8401A'}} />
           <div style={{flex:1}}>
-            <div style={{fontWeight:500,color:'#E8401A'}}>{cart.length} class{cart.length>1?'es':''} in your cart</div>
-            <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',marginTop:2}}>Upload your receipt to confirm enrollment.</div>
+            <div style={{fontWeight:500,color:'#E8401A'}}>{cart.length} item{cart.length>1?'s':''} in your cart</div>
+            <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',marginTop:2}}>Upload your receipt to confirm your purchase.</div>
           </div>
           <button className="btn btn-p" style={{fontSize:'var(--fs-sm)'}}>Checkout →</button>
         </div>
@@ -187,11 +184,11 @@ export default function StudentDashboard({
       {/* ── My Classes (with inline leave request) ── */}
       <div className="card">
         <div className="card-hdr">
-          <span className="card-title">My classes ({enrolledClasses.length + pendingEnrollClasses.length})</span>
-          <button className="btn" onClick={() => navigate('sschedule')}>Browse all</button>
+          <span className="card-title">My classes ({enrolledClasses.length + pendingEnrollClasses.length + pendingPackPayments.length})</span>
+          <button className="btn" onClick={() => navigate('sschedule')}>Browse classes</button>
         </div>
 
-        {enrolledClasses.length===0 && pendingEnrollClasses.length===0 ? (
+        {enrolledClasses.length===0 && pendingEnrollClasses.length===0 && pendingPackPayments.length===0 ? (
           <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
             <i className="ti ti-calendar-off" style={{fontSize:28,display:'block',marginBottom:8,opacity:.4}} />
             Not enrolled yet. <span style={{cursor:'pointer',color:'#E8401A',textDecoration:'underline'}} onClick={() => navigate('sschedule')}>Browse classes</span> to sign up.
@@ -226,19 +223,25 @@ export default function StudentDashboard({
                       <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'var(--color-text-primary)'}}>
                         <i className="ti ti-calendar-minus" style={{marginRight:4, color:'#E8401A'}}/> Request leave — <em>{c.name}</em>
                       </div>
-                      <div>
-                        <label className="form-label">Reason *</label>
-                        <textarea
-                          value={leaveReason}
-                          onChange={e => setLeaveReason(e.target.value)}
-                          placeholder="e.g. Doctor's appointment, sick, travel…"
-                          style={{minHeight:52}}
-                          autoFocus
-                        />
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)'}}>
+                        <div>
+                          <label className="form-label">Session date *</label>
+                          <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="form-label">Reason *</label>
+                          <textarea
+                            value={leaveReason}
+                            onChange={e => setLeaveReason(e.target.value)}
+                            placeholder="e.g. Doctor's appointment, sick, travel…"
+                            style={{minHeight:52}}
+                            autoFocus
+                          />
+                        </div>
                       </div>
                       <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
                         <button className="btn" style={{fontSize:12}} onClick={() => setLeaveFormFor(null)}>Cancel</button>
-                        <button className="btn btn-p" style={{fontSize:12}} disabled={!leaveReason.trim()} onClick={() => handleSubmitLeave(c)}>
+                        <button className="btn btn-p" style={{fontSize:12}} disabled={!leaveReason.trim() || !leaveDate} onClick={() => handleSubmitLeave(c)}>
                           <i className="ti ti-send" /> Submit
                         </button>
                       </div>
@@ -261,6 +264,16 @@ export default function StudentDashboard({
                 <div style={{flex:1, minWidth:0}}>
                   <div style={{fontSize:'var(--fs-body)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', opacity:0.75}}>{c.name}</div>
                   <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>{c.days} · {c.time}</div>
+                </div>
+                <span className="pill pill-warn">⏳ Pending</span>
+              </div>
+            ))}
+            {pendingPackPayments.map((p, i) => (
+              <div className="row" key={i}>
+                <span className="dot" style={{background:'#F5B800', opacity:0.5}} />
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontSize:'var(--fs-body)', fontWeight:500, opacity:0.75}}>10-hour pack</div>
+                  <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>${p.items.find(i => i.pkgType==='10pack')?.price || ''} · Submitted {p.submittedAt}</div>
                 </div>
                 <span className="pill pill-warn">⏳ Pending</span>
               </div>

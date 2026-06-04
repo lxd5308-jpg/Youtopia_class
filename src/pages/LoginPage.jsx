@@ -1,63 +1,57 @@
 import { useState } from 'react'
-import { useGoogleLogin } from '@react-oauth/google'
+import { auth } from '../config/firebase'
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { isApprovedTeacher } from '../config'
 import styles from './LoginPage.module.css'
 
 export default function LoginPage({ onLogin, teacherEmails=[] }) {
-  const [role, setRole]     = useState('student')
+  const [role, setRole]       = useState('student')
   const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState('')
+  const [error, setError]     = useState('')
 
-  // Check both hardcoded config emails AND dynamically added emails from teacher portal
   function checkTeacherAccess(email) {
     if (isApprovedTeacher(email)) return true
     return teacherEmails.map(e => e.toLowerCase()).includes((email||'').toLowerCase())
   }
 
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setLoading(true)
-      setError('')
-      try {
-        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-        })
-        if (!res.ok) throw new Error('Failed to fetch profile')
-        const profile = await res.json()
+  async function handleGoogleLogin() {
+    setLoading(true)
+    setError('')
+    try {
+      const provider = new GoogleAuthProvider()
+      const result   = await signInWithPopup(auth, provider)
+      const fbUser   = result.user
 
-        // ── Teacher access control ──────────────────────────
-        if (role === 'teacher' && !checkTeacherAccess(profile.email)) {
-          setError(
-            'This account is not registered as a teacher. ' +
-            'Please sign in as a Student, or contact the academy admin to request teacher access.'
-          )
-          setLoading(false)
-          return
-        }
-
-        const initials = profile.name
-          ? profile.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-          : profile.email.slice(0, 2).toUpperCase()
-
-        onLogin({
-          role,
-          name:     profile.name || profile.email,
-          initials,
-          email:    profile.email,
-          avatar:   profile.picture,
-          provider: 'google',
-        })
-      } catch (err) {
-        setError('Could not load your Google profile. Please try again.')
-      } finally {
+      if (role === 'teacher' && !checkTeacherAccess(fbUser.email)) {
+        await auth.signOut()
+        setError(
+          'This account is not registered as a teacher. ' +
+          'Please sign in as a Student, or contact the academy admin to request teacher access.'
+        )
         setLoading(false)
+        return
       }
-    },
-    onError: () => {
-      setError('Google sign-in was cancelled or failed. Please try again.')
+
+      const initials = fbUser.displayName
+        ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+        : fbUser.email.slice(0, 2).toUpperCase()
+
+      onLogin({
+        role,
+        name:     fbUser.displayName || fbUser.email,
+        initials,
+        email:    fbUser.email,
+        avatar:   fbUser.photoURL,
+        provider: 'google',
+      })
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setError('Sign-in failed. Please try again.')
+      }
+    } finally {
       setLoading(false)
-    },
-  })
+    }
+  }
 
   return (
     <div className={styles.shell}>
@@ -104,7 +98,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
 
         <button
           className={styles.authBtn}
-          onClick={() => { setError(''); googleLogin() }}
+          onClick={handleGoogleLogin}
           disabled={loading}
         >
           {loading

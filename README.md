@@ -4,10 +4,10 @@ A web app for teachers and students at Youtopia Dance Academy. Built with React 
 
 ## Features
 
-- **Role-based login** — Teacher and Student views via Google or WeChat
+- **Role-based login** — Teacher and Student views via web or mobile devices
 - **Teacher**: dashboard, weekly schedule, messaging, attendance export, student package tracking, auto-notifications
 - **Student**: class enrollment, drop-in sign-up, leave requests, package usage tracking, payments
-- **Payments** via Zelle and Venmo
+- **Payments** via Zelle, Venmo or cash
 - **Export attendance** to Google Sheets
 
 ---
@@ -63,20 +63,9 @@ Output goes to the `dist/` folder.
 
 ---
 
-## Deploying to Vercel (recommended — zero config)
+## Deploying to Cloudfare 
 
-1. Push this repo to GitHub
-2. Go to [vercel.com](https://vercel.com) → New Project → Import your repo
-3. Vercel auto-detects Vite — click Deploy
-
----
-
-## Deploying to Netlify
-
-1. Push this repo to GitHub
-2. Go to [netlify.com](https://netlify.com) → Add new site → Import from Git
-3. Build command: `npm run build`
-4. Publish directory: `dist`
+Hosted in this website: https://youtopia-class.pages.dev/
 
 ---
 
@@ -87,10 +76,6 @@ Output goes to the `dist/` folder.
 - Enable Google Sign-In API
 - Add your Client ID to `src/pages/LoginPage.jsx`
 - Use `@react-oauth/google` or Firebase Auth
-
-### WeChat OAuth
-- Register at [open.weixin.qq.com](https://open.weixin.qq.com)
-- Implement server-side OAuth flow (WeChat requires a backend)
 
 ---
 

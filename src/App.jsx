@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { db } from './config/firebase'
+import { db, auth } from './config/firebase'
 import {
   doc, collection, onSnapshot, setDoc, getDoc, addDoc,
   query, where,
 } from 'firebase/firestore'
+import { signOut } from 'firebase/auth'
 import LoginPage from './pages/LoginPage'
 import AppShell from './components/AppShell'
 import { CLASSES, SEMESTER } from './data/mockData'
@@ -48,12 +49,14 @@ export default function App() {
   const [td,   setTd]             = useState(defaultTeacher())
   const [sd,   setSd]             = useState(defaultStudent())
   const [studentLoading, setStudentLoading] = useState(false)
-  const studentEmailRef           = useRef(null)
-  const studentUnsubRef           = useRef(null)
+  const studentEmailRef = useRef(null)
+  const studentUnsubRef = useRef(null)
+  const globalUnsubRef  = useRef(null)
 
-  // ── Global Firestore listeners (always on) ─────────────────────
-  useEffect(() => {
-    // Settings doc: classes, teacherEmails, emailConfig
+  // ── Start global Firestore listeners (called after login) ──────
+  function startGlobalListeners() {
+    if (globalUnsubRef.current) return  // already running
+
     const unsubSettings = onSnapshot(doc(db, 'settings', 'main'), snap => {
       if (snap.exists()) {
         const data = snap.data()
@@ -65,7 +68,6 @@ export default function App() {
           semester:      data.semester      || prev.semester,
         }))
       } else {
-        // First-time setup: seed defaults
         setDoc(doc(db, 'settings', 'main'), {
           classes:       CLASSES,
           teacherEmails: ['summerli634@gmail.com', 'info@youtopiadanceacademy.com'],
@@ -110,12 +112,20 @@ export default function App() {
       setTd(prev => ({ ...prev, paymentHistory: hist }))
     })
 
-    return () => {
+    globalUnsubRef.current = () => {
       unsubSettings(); unsubPayments(); unsubLeaves()
       unsubEnrollments(); unsubPacks(); unsubMessages()
       unsubInbox(); unsubPayHist()
     }
-  }, [])
+  }
+
+  function stopGlobalListeners() {
+    if (globalUnsubRef.current) {
+      globalUnsubRef.current()
+      globalUnsubRef.current = null
+    }
+    setTd(defaultTeacher())
+  }
 
   // ── Auto-archive: move old semester enrollments to history on login ──
   useEffect(() => {
@@ -335,6 +345,28 @@ export default function App() {
     updateStudentDoc(d => ({
       ...d,
       pendingEnroll: [...new Set([...(d.pendingEnroll||[]), ...classIds])]
+    }))
+  }
+
+  // ── addClassToCart — atomically adds to cart AND pendingEnroll ──
+  // Replaces the two-call pattern (setCart + signUpForClasses) to prevent
+  // the race condition where two rapid Firestore writes could leave
+  // pendingEnroll empty if logout happens between them.
+  function addClassToCart(cls) {
+    updateStudentDoc(d => ({
+      ...d,
+      cart: [...(d.cart||[]).filter(i => i.classId !== cls.id), { classId: cls.id, packageType: 'full' }],
+      pendingEnroll: [...new Set([...(d.pendingEnroll||[]), cls.id])],
+    }))
+  }
+
+  // ── addPackToCart — atomically adds 10-hour pack to cart ───────
+  function addPackToCart() {
+    updateStudentDoc(d => ({
+      ...d,
+      cart: d.cart?.some(i => i.classId === '__10pack__')
+        ? d.cart
+        : [...(d.cart||[]), { classId: '__10pack__', packageType: '10pack' }],
     }))
   }
 
@@ -582,6 +614,7 @@ export default function App() {
 
   // ── handleLogin ────────────────────────────────────────────────
   function handleLogin(loggedInUser) {
+    startGlobalListeners()
     setUser(loggedInUser)
     if (loggedInUser.role === 'student') {
       const email = loggedInUser.email || loggedInUser.name || 'guest'
@@ -599,9 +632,11 @@ export default function App() {
       studentUnsubRef.current()
       studentUnsubRef.current = null
     }
+    stopGlobalListeners()
     setUser(null)
     studentEmailRef.current = null
     setSd(defaultStudent())
+    signOut(auth).catch(() => {})
   }
 
   // ── Render ─────────────────────────────────────────────────────
@@ -632,6 +667,8 @@ export default function App() {
       readMessageIds={sd.readMessageIds||[]}
       enrollStudent={enrollStudent}
       signUpForClasses={signUpForClasses}
+      addClassToCart={addClassToCart}
+      addPackToCart={addPackToCart}
       logSession={logSession}
       submitLeave={submitLeave}
       resolveLeave={resolveLeave}

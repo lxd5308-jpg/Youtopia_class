@@ -14,6 +14,7 @@ export default function MyClasses({
   // Leave request state — keyed by classId
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)  // classId with form open
   const [leaveReason,    setLeaveReason]    = useState('')
+  const [leaveDate,      setLeaveDate]      = useState('')
   const [leaveSubmitted, setLeaveSubmitted] = useState({})    // { [classId]: true }
 
   // Makeup request state — keyed by leaveId
@@ -34,16 +35,18 @@ export default function MyClasses({
   function openLeaveForm(classId) {
     setLeaveFormFor(classId)
     setLeaveReason('')
+    setLeaveDate('')
   }
 
   function handleSubmitLeave(cls) {
-    if (!leaveReason.trim()) return
+    if (!leaveReason.trim() || !leaveDate) return
     const req = {
       id:           Date.now(),
       studentName:  studentName || user?.name || 'Student',
       studentEmail: user?.email || '',
       className:    cls.name,
       reason:       leaveReason.trim(),
+      sessionDate:  leaveDate,
       date:         new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
       status:       'pending',
     }
@@ -220,7 +223,7 @@ export default function MyClasses({
             <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:4 }}>
               Complete checkout in{' '}
               <span style={{ cursor:'pointer', color:'#E8401A', textDecoration:'underline' }} onClick={() => navigate('shub')}>
-                Classes &amp; Payments
+                Payments
               </span>
             </div>
           </div>
@@ -231,7 +234,7 @@ export default function MyClasses({
             <i className="ti ti-clipboard-list" style={{ fontSize:28, display:'block', marginBottom:8, opacity:.4 }} />
             Not enrolled yet.{' '}
             <span style={{ cursor:'pointer', color:'#E8401A', textDecoration:'underline' }} onClick={() => navigate('sschedule')}>
-              Browse the schedule
+              Browse classes
             </span>{' '}
             to sign up.
           </div>
@@ -288,19 +291,25 @@ export default function MyClasses({
                   <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'var(--color-text-primary)' }}>
                     <i className="ti ti-calendar-minus" style={{ marginRight:4, color:'#E8401A' }}/> Request leave — <em>{c.name}</em>
                   </div>
-                  <div>
-                    <label className="form-label">Reason *</label>
-                    <textarea
-                      value={leaveReason}
-                      onChange={e => setLeaveReason(e.target.value)}
-                      placeholder="e.g. Doctor's appointment, sick, travel…"
-                      style={{ minHeight:52 }}
-                      autoFocus
-                    />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)' }}>
+                    <div>
+                      <label className="form-label">Session date *</label>
+                      <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="form-label">Reason *</label>
+                      <textarea
+                        value={leaveReason}
+                        onChange={e => setLeaveReason(e.target.value)}
+                        placeholder="e.g. Doctor's appointment, sick, travel…"
+                        style={{ minHeight:52 }}
+                        autoFocus
+                      />
+                    </div>
                   </div>
                   <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
                     <button className="btn" style={{ fontSize:12 }} onClick={() => setLeaveFormFor(null)}>Cancel</button>
-                    <button className="btn btn-p" style={{ fontSize:12 }} disabled={!leaveReason.trim()} onClick={() => handleSubmitLeave(c)}>
+                    <button className="btn btn-p" style={{ fontSize:12 }} disabled={!leaveReason.trim() || !leaveDate} onClick={() => handleSubmitLeave(c)}>
                       <i className="ti ti-send" /> Submit
                     </button>
                   </div>
@@ -519,11 +528,11 @@ export default function MyClasses({
       {myClasses.length === 0 && pendingCls.length === 0 && allPacks.length === 0 && (
         <div className="card" style={{ textAlign:'center', padding:'var(--sp-lg)' }}>
           <i className="ti ti-package" style={{ fontSize:36, display:'block', marginBottom:'var(--sp-sm)', opacity:.4, color:'var(--color-text-secondary)' }} />
-          <div style={{ fontSize:'var(--fs-body)', fontWeight:500, marginBottom:8 }}>No active 10-session packs</div>
+          <div style={{ fontSize:'var(--fs-body)', fontWeight:500, marginBottom:8 }}>No active 10-hour packs</div>
           <div style={{ fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)', lineHeight:1.6 }}>
             Purchase a pack from{' '}
             <span style={{ cursor:'pointer', color:'#E8401A', textDecoration:'underline' }} onClick={() => navigate('shub')}>
-              Classes &amp; Payments
+              Payments
             </span>
             {' '}and the teacher will activate it once payment is confirmed.
           </div>

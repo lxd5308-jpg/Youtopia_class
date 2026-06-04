@@ -10,7 +10,7 @@ function calcPrice(cls, pkgType) {
   return 0
 }
 
-const PKG_LABELS = { full:'Full semester', '10pack':'10-session pack', dropin:'Drop-in' }
+const PKG_LABELS = { full:'Full semester', '10pack':'10-hour pack', dropin:'Drop-in' }
 
 const PAY_METHODS = [
   { value:'zelle', label:'Zelle', sub:'Youtopia Dance Academy, LLC',       icon:'Z', bg:'#6B38FB22', col:'#6B38FB' },
@@ -43,40 +43,12 @@ export default function Hub({
   studentName,
   setPendingEnroll,
 }) {
-  const [tab, setTab] = useState('cart')  // 'cart' | 'purchase'
-
-  const enrolledClasses = classes.filter(c => enrolled.includes(c.id))
   const myPending = (pendingPayments || []).filter(p =>
     p.studentEmail === (user?.email || '') || p.studentName === (user?.name || '')
   )
 
-  // Auto-switch to purchase tab if cart is empty and they land here
-  const activeTab = (tab === 'cart' && cart.length === 0 && myPending.length === 0) ? 'purchase' : tab
-
   return (
-    <>
-      {/* Tabs */}
-      <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
-        {[
-          { v:'cart',     label:`Cart${cart.length > 0 ? ` (${cart.length})` : ''}`,  icon:'ti-shopping-cart' },
-          { v:'purchase', label:'Purchase',                                             icon:'ti-credit-card'   },
-        ].map(t => (
-          <button key={t.v} className="btn" onClick={() => setTab(t.v)} style={{
-            background:  activeTab === t.v ? '#E8401A' : 'transparent',
-            color:       activeTab === t.v ? '#fff'    : 'var(--color-text-primary)',
-            borderColor: activeTab === t.v ? '#E8401A' : 'var(--color-border-secondary)',
-          }}>
-            <i className={`ti ${t.icon}`} /> {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── CART TAB ─────────────────────────────────────────── */}
-      {activeTab === 'cart' && <CartTab user={user} studentName={studentName} cart={cart} setCart={setCart} classes={classes} myPending={myPending} setPendingPayments={setPendingPayments} setPaymentHistory={setPaymentHistory} navigate={navigate} setTab={setTab} />}
-
-      {/* ── PURCHASE TAB ─────────────────────────────────────── */}
-      {activeTab === 'purchase' && <PurchaseTab user={user} studentName={studentName} classes={classes} setPendingPayments={setPendingPayments} />}
-    </>
+    <CartTab user={user} studentName={studentName} cart={cart} setCart={setCart} classes={classes} myPending={myPending} setPendingPayments={setPendingPayments} setPaymentHistory={setPaymentHistory} navigate={navigate} setTab={() => {}} />
   )
 }
 
@@ -85,19 +57,24 @@ export default function Hub({
 // ─────────────────────────────────────────────────────────────
 function CartTab({ user, studentName, cart, setCart, classes, myPending, setPendingPayments, setPaymentHistory, navigate, setTab }) {
   const [pkgTypes, setPkgTypes]     = useState(() => Object.fromEntries(cart.map(i => [i.classId, i.packageType || 'full'])))
+  const [packAmount, setPackAmount] = useState('')   // custom amount for 10-hour pack
   const [payMethod, setPayMethod]   = useState('zelle')
   const [note, setNote]             = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
   const [errors, setErrors]         = useState({})
   const [submitted, setSubmitted]   = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
+  const has10Pack   = cart.some(i => i.classId === '__10pack__')
   const cartClasses = cart.map(item => ({
     ...item,
     cls:     classes.find(c => c.id === item.classId),
     pkgType: pkgTypes[item.classId] || 'full',
   })).filter(i => i.cls)
 
-  const total = cartClasses.reduce((s, i) => s + calcPrice(i.cls, i.pkgType), 0)
+  const packAmountNum = has10Pack ? (Number(packAmount) || 0) : 0
+  const total = cartClasses.reduce((s, i) => s + calcPrice(i.cls, i.pkgType), 0) + packAmountNum
+  const cartEmpty = cartClasses.length === 0 && !has10Pack
 
   function updatePkg(classId, val) {
     setPkgTypes(p => ({ ...p, [classId]: val }))
@@ -111,6 +88,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
 
   function validate() {
     const e = {}
+    if (has10Pack && !packAmount) e.packAmount = 'Please enter the amount for the 10-hour pack.'
     if (!receiptFile) e.receipt = 'Please upload your payment receipt screenshot.'
     if (!note.trim()) e.note    = 'Please add a note with your name and class.'
     setErrors(e)
@@ -118,17 +96,23 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
   }
 
   function submitPayment() {
+    if (submitting) return
     if (!validate()) return
+    setSubmitting(true)
+    const packItems = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
     const submission = {
       id:           Date.now(),
       studentName:  studentName || user?.name  || 'Student',
       studentEmail: user?.email || '',
-      items: cartClasses.map(i => ({
-        classId:   i.classId,
-        className: i.cls.name,
-        pkgType:   i.pkgType,
-        price:     calcPrice(i.cls, i.pkgType),
-      })),
+      items: [
+        ...cartClasses.map(i => ({
+          classId:   i.classId,
+          className: i.cls.name,
+          pkgType:   i.pkgType,
+          price:     calcPrice(i.cls, i.pkgType),
+        })),
+        ...packItems,
+      ],
       method:      payMethod,
       note:        note.trim(),
       receiptFile: receiptFile?.name || null,
@@ -148,19 +132,19 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
         <div style={{fontSize:48, marginBottom:'var(--sp-md)'}}>📬</div>
         <div style={{fontSize:16, fontWeight:500, marginBottom:8}}>Payment submitted!</div>
         <div style={{fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)', lineHeight:1.7, maxWidth:360, margin:'0 auto var(--sp-lg)'}}>
-          Your payment is pending teacher confirmation. Once confirmed, the classes will appear on your dashboard and schedule.
+          Your payment is pending teacher confirmation. Once confirmed, your purchase will be activated.
         </div>
         <div style={{background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-md)', maxWidth:340, margin:'0 auto var(--sp-md)', textAlign:'left', fontSize:'var(--fs-sm)'}}>
           <div style={{fontWeight:500, marginBottom:'var(--sp-xs)'}}>What happens next:</div>
           <div style={{display:'flex', flexDirection:'column', gap:6, color:'var(--color-text-secondary)'}}>
             <div><i className="ti ti-check" style={{color:'#E8401A', marginRight:6}} />Receipt received</div>
             <div><i className="ti ti-clock" style={{color:'#F47B20', marginRight:6}} />Teacher reviews (usually within 24 hours)</div>
-            <div><i className="ti ti-calendar" style={{color:'#0F6E56', marginRight:6}} />Classes appear on your dashboard &amp; schedule</div>
+            <div><i className="ti ti-calendar" style={{color:'#0F6E56', marginRight:6}} />Purchase activated on your dashboard</div>
           </div>
         </div>
         <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'center'}}>
           <button className="btn btn-p" onClick={() => navigate('sdash')}><i className="ti ti-home" /> Dashboard</button>
-          <button className="btn" onClick={() => setTab('history')}>View submission</button>
+          <button className="btn" onClick={() => setSubmitted(false)}><i className="ti ti-receipt" /> View history</button>
         </div>
       </div>
     )
@@ -171,17 +155,48 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
       {/* Cart items */}
       <div className="card">
         <div className="card-hdr">
-          <span className="card-title">{cart.length === 0 ? 'Cart is empty' : `Cart — ${cart.length} class${cart.length > 1 ? 'es' : ''}`}</span>
+          <span className="card-title">{cartEmpty ? 'Cart is empty' : `Cart — ${cart.length} item${cart.length > 1 ? 's' : ''}`}</span>
           <button className="btn" onClick={() => navigate('sschedule')}><i className="ti ti-plus" /> Add classes</button>
         </div>
 
-        {cartClasses.length === 0 ? (
+        {cartEmpty ? (
           <div style={{textAlign:'center', padding:'var(--sp-lg) 0', color:'var(--color-text-secondary)', fontSize:'var(--fs-sm)'}}>
             <i className="ti ti-shopping-cart-off" style={{fontSize:28, display:'block', marginBottom:8, opacity:.4}} />
-            Your cart is empty. Go to <span style={{cursor:'pointer', color:'#E8401A', textDecoration:'underline'}} onClick={() => navigate('sschedule')}>My Classes</span> to sign up.
+            Your cart is empty. Go to <span style={{cursor:'pointer', color:'#E8401A', textDecoration:'underline'}} onClick={() => navigate('sschedule')}>Classes</span> to sign up.
           </div>
         ) : (
           <>
+            {/* 10-hour pack item */}
+            {has10Pack && (
+              <div style={{padding:'var(--sp-md) 0', borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
+                <div style={{display:'flex', alignItems:'flex-start', gap:10, marginBottom:'var(--sp-sm)'}}>
+                  <span className="dot" style={{background:'#F5B800', marginTop:5, flexShrink:0}} />
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontSize:'var(--fs-body)', fontWeight:500}}>10-hour pack</div>
+                    <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:2}}>Enter the amount based on your class fee × 10</div>
+                  </div>
+                  <button onClick={() => { setCart(c => c.filter(i => i.classId !== '__10pack__')); setPackAmount('') }} style={{background:'none', border:'none', cursor:'pointer', color:'var(--color-text-secondary)', padding:'2px 4px', flexShrink:0}}>
+                    <i className="ti ti-x" style={{fontSize:13}} />
+                  </button>
+                </div>
+                <div style={{paddingLeft:17}}>
+                  <label className="form-label">Amount <span style={{color:'#E8401A'}}>*</span></label>
+                  <div style={{display:'flex', alignItems:'center', gap:'var(--sp-sm)'}}>
+                    <div style={{position:'relative', width:140}}>
+                      <span style={{position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--color-text-secondary)'}}>$</span>
+                      <input
+                        type="number" min="0" value={packAmount}
+                        onChange={e => { setPackAmount(e.target.value); setErrors(er => ({...er, packAmount:null})) }}
+                        placeholder="e.g. 380"
+                        style={{paddingLeft:22}}
+                      />
+                    </div>
+                  </div>
+                  {errors.packAmount && <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>{errors.packAmount}</div>}
+                </div>
+              </div>
+            )}
+
             {cartClasses.map(item => {
               const p = calcPrice(item.cls, item.pkgType)
               return (
@@ -204,7 +219,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
                   </div>
                   {/* Package type picker */}
                   <div style={{display:'flex', gap:'var(--sp-xs)', flexWrap:'wrap', paddingLeft:17}}>
-                    {[{v:'full', l:'Full semester'}, {v:'dropin', l:'Drop-in'}].map(pt => {
+                    {[{v:'full', l:'Full semester'}, ...(item.cls.category === 'adult' ? [{v:'dropin', l:'Drop-in'}] : [])].map(pt => {
                       const pp = calcPrice(item.cls, pt.v), sel = item.pkgType === pt.v
                       return (
                         <button key={pt.v} onClick={() => updatePkg(item.classId, pt.v)} style={{
@@ -227,7 +242,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
             <div style={{display:'flex', justifyContent:'flex-end', paddingTop:'var(--sp-md)', gap:'var(--sp-md)'}}>
               <div style={{textAlign:'right'}}>
                 <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Order total</div>
-                <div style={{fontSize:20, fontWeight:500}}>${total}</div>
+                <div style={{fontSize:20, fontWeight:500}}>{has10Pack && !packAmount ? '—' : `$${total}`}</div>
               </div>
             </div>
           </>
@@ -235,7 +250,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
       </div>
 
       {/* Payment section — only show if cart has items */}
-      {cartClasses.length > 0 && (
+      {!cartEmpty && (
         <div className="card">
           <div className="card-hdr"><span className="card-title">Payment</span></div>
 
@@ -290,7 +305,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
           <div style={{marginBottom:'var(--sp-md)'}}>
             <label className="form-label">Payment note — include your name and class <span style={{color:'#E8401A'}}>*</span></label>
             <textarea value={note} onChange={e => { setNote(e.target.value); setErrors(er => ({...er, note:null})) }}
-              placeholder={`e.g. ${payMethod} $${total} — ${user?.name || 'Your name'}, ${cartClasses[0]?.cls?.name || 'class name'}`} style={{minHeight:56}} />
+              placeholder={`e.g. ${payMethod} $${total||'___'} — ${user?.name || 'Your name'}, ${cartClasses[0]?.cls?.name || (has10Pack ? '10-hour pack' : 'class name')}`} style={{minHeight:56}} />
             {errors.note && <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>{errors.note}</div>}
           </div>
 
@@ -303,7 +318,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
               <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Total</div>
               <div style={{fontSize:18, fontWeight:500}}>${total}</div>
             </div>
-            <button className="btn btn-p" style={{fontSize:14, padding:'10px 24px'}} onClick={submitPayment}>
+            <button className="btn btn-p" style={{fontSize:14, padding:'10px 24px'}} onClick={submitPayment} disabled={submitting}>
               <i className="ti ti-send" /> Submit payment
             </button>
           </div>
@@ -371,7 +386,7 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
   function handleSubmit() {
     if (!validate()) return
     const className = purchaseType === 'class' ? selCls?.name
-                    : purchaseType === '10pack' ? '10-session pack'
+                    : purchaseType === '10pack' ? '10-hour pack'
                     : 'Drop-in (Adult)'
     const submission = {
       id:           Date.now(),
@@ -410,7 +425,7 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
         <div style={{display:'flex', gap:'var(--sp-sm)', marginTop:6, flexWrap:'wrap'}}>
           {[
             { v:'class',  l:'Sign up for a class',  d:'Full semester — all sessions', i:'ti-calendar' },
-            { v:'10pack', l:'10-session pack',       d:'No class needed · valid 3 months', i:'ti-package' },
+            { v:'10pack', l:'10-hour pack',       d:'No class needed · valid 3 months', i:'ti-package' },
             { v:'dropin', l:'Drop-in',               d:'$40 · Adult class · confirm day before', i:'ti-ticket' },
           ].map(pt => {
             const sel = purchaseType === pt.v

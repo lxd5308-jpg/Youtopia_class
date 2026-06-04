@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
 
 // ── Production database (youtopia-3e141) ──────────────────────
 const prodConfig = {
@@ -27,4 +28,5 @@ const devConfig = {
 const config = import.meta.env.DEV ? devConfig : prodConfig
 
 const app = initializeApp(config)
-export const db = getFirestore(app)
+export const db   = getFirestore(app)
+export const auth = getAuth(app)

@@ -29,13 +29,14 @@ const PAGE_TITLES = {
   tdash:'Dashboard', tschedule:'Schedule',
   troster:'Student roster', tpackages:'Student packages',
   tpayments:'Payments', tconfig:'Configuration',
-  sdash:'Dashboard', sschedule:'Schedule', smyclasses:'My classes', shub:'Classes & Payments',
+  sdash:'Dashboard', sschedule:'Schedule', smyclasses:'My classes', shub:'Payments',
 }
 
 export default function AppShell(props) {
   const { user, onLogout, pendingPayments, teacherLeaves, cart } = props
   const isTeacher = user.role==='teacher'
-  const [page, setPage] = useState(isTeacher ? 'tdash' : 'sdash')
+  const [page, setPageRaw] = useState(isTeacher ? 'tdash' : 'sdash')
+  function setPage(p) { setPageRaw(p); window.scrollTo({ top: 0, behavior: 'instant' }) }
 
   const pendingPay = (pendingPayments||[]).filter(p=>p.status==='pending').length
   const cartLen    = (cart||[]).length
@@ -47,10 +48,10 @@ export default function AppShell(props) {
   const studentNav = [
     { section:'Main' },
     { id:'sdash',      label:'Dashboard',         shortLabel:'Home',     icon:'ti-layout-dashboard' },
-    { id:'sschedule',  label:'Schedule',           shortLabel:'Schedule', icon:'ti-calendar' },
-    { id:'smyclasses', label:'My classes',         shortLabel:'Classes',  icon:'ti-clipboard-list' },
+    { id:'sschedule',  label:'Schedule',   shortLabel:'Schedule',  icon:'ti-calendar' },
+    { id:'smyclasses', label:'My classes', shortLabel:'Classes',  icon:'ti-clipboard-list' },
     { section:'My Account' },
-    { id:'shub',       label:'Classes & Payments', shortLabel:'Payments', icon:'ti-credit-card', badge:cartLen||null },
+    { id:'shub',       label:'Payments',  shortLabel:'Payments', icon:'ti-credit-card', badge:cartLen||null },
   ]
 
   const nav = isTeacher ? teacherNav : studentNav
