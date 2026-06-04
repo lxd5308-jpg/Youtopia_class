@@ -26,6 +26,7 @@ export default function MyClasses({
   // Session pack logging state
   const [loggingPack,    setLoggingPack]    = useState({})
   const [selMins,        setSelMins]        = useState({})
+  const [selTeacher,     setSelTeacher]     = useState({})
 
   const myClasses  = classes.filter(c => enrolledIds.has(c.id))
   const pendingCls = classes.filter(c => pendingIds.has(c.id) && !enrolledIds.has(c.id))
@@ -81,11 +82,16 @@ export default function MyClasses({
 
   // ── Session pack helpers ──────────────────────────────────────
   function handleLogSession(packId) {
-    const mins  = Number(selMins[packId] || 60)
-    const hours = parseFloat((mins / 60).toFixed(2))
+    const mins    = Number(selMins[packId] || 60)
+    const hours   = parseFloat((mins / 60).toFixed(2))
+    const teacher = (selTeacher[packId] || '').trim()
     setLoggingPack(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name, hours)
-    setTimeout(() => setLoggingPack(l => ({ ...l, [packId]: false })), 800)
+    logSession(packId, user?.email, user?.name, hours, teacher)
+    setTimeout(() => {
+      setLoggingPack(l => ({ ...l, [packId]: false }))
+      setSelMins(m => ({ ...m, [packId]: '' }))
+      setSelTeacher(t => ({ ...t, [packId]: '' }))
+    }, 800)
   }
 
   // ── Makeup form (reusable block) ──────────────────────────────
@@ -486,6 +492,9 @@ export default function MyClasses({
                         <i className="ti ti-clock" style={{ fontSize:10, color:'#fff' }} />
                       </div>
                       <span style={{ fontSize:'var(--fs-sm)' }}>{entry.hours || 1} hr{(entry.hours||1) !== 1 ? 's' : ''}</span>
+                      {entry.teacher && (
+                        <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>· {entry.teacher}</span>
+                      )}
                       <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', whiteSpace:'nowrap' }}>{entry.date}</span>
                     </div>
                   ))}
@@ -510,6 +519,13 @@ export default function MyClasses({
                   style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
                 />
                 <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
+                <input
+                  type="text"
+                  placeholder="Teacher (optional)"
+                  value={selTeacher[pack.id] ?? ''}
+                  onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
+                  style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
                 <button className="btn btn-p" disabled={loggingPack[pack.id]} onClick={() => handleLogSession(pack.id)}>
                   {loggingPack[pack.id]
                     ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }} /> Logging…</>

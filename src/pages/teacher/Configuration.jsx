@@ -61,74 +61,6 @@ function parseExcel(buffer) {
   }).filter(c => c.name)
 }
 
-// ── Call Claude API to parse an image or PDF ──────────────────
-async function parseWithClaude(file) {
-  const toBase64 = (f) => new Promise((res, rej) => {
-    const r = new FileReader()
-    r.onload = () => res(r.result.split(',')[1])
-    r.onerror = rej
-    r.readAsDataURL(f)
-  })
-
-  const base64 = await toBase64(file)
-  const mediaType = file.type || 'image/jpeg'
-
-  const prompt = `You are parsing a dance academy class schedule. Extract ALL classes from this schedule image/PDF and return ONLY a JSON array with no other text, markdown, or explanation.
-
-Each class object must have these exact keys:
-- name: class name (string)
-- category: one of "kids", "adult", or "comp" (competition team)
-- days: day(s) of week in English, e.g. "周二 Tue" or "Sat"
-- time: time range, e.g. "6:00pm–8:00pm"
-- duration: e.g. "2hr" or "1.5hr"
-- fee: number (per-session fee in USD, no $ sign)
-- sessions: number (total sessions this semester)
-- instructor: instructor name (string)
-
-Return ONLY the JSON array. Example: [{"name":"Level 3 C3","category":"kids","days":"周二 Tue","time":"6:00pm–8:00pm","duration":"2hr","fee":48,"sessions":22,"instructor":"楚濛"}]`
-
-  const body = {
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    messages: [{
-      role: 'user',
-      content: [{
-        type: mediaType === 'application/pdf' ? 'document' : 'image',
-        source: { type: 'base64', media_type: mediaType, data: base64 },
-      }, {
-        type: 'text',
-        text: prompt,
-      }],
-    }],
-  }
-
-  const res  = await fetch('https://api.anthropic.com/v1/messages', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  })
-
-  if (!res.ok) throw new Error(`API error ${res.status}`)
-  const data = await res.json()
-  const text = data.content?.map(b => b.text||'').join('').trim()
-
-  // Strip any accidental markdown fences
-  const clean = text.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim()
-  const arr   = JSON.parse(clean)
-
-  return arr.map((c, i) => ({
-    id:         Date.now() + i,
-    name:       c.name        || `Class ${i+1}`,
-    category:   normCategory(c.category || ''),
-    days:       c.days        || '',
-    time:       c.time        || '',
-    duration:   c.duration    || '',
-    fee:        Number(c.fee) || 0,
-    sessions:   Number(c.sessions) || 0,
-    instructor: c.instructor  || '',
-    color:      COLORS[i % COLORS.length],
-  }))
-}
 
 const CAT_LABEL = { kids:'少儿部 — Kids', adult:'成人部 — Adult', comp:'Competition Team' }
 
@@ -223,19 +155,15 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
       const ext = file.name.split('.').pop().toLowerCase()
 
       if (ext === 'csv') {
-        // Parse CSV directly in browser
         const text = await file.text()
         parsed = parseCSV(text)
         if (!parsed || parsed.length === 0) throw new Error('Could not read CSV. Make sure it has columns: name, category, days, time, duration, fee, sessions, instructor')
       } else if (ext === 'xlsx' || ext === 'xls') {
-        // Parse Excel in browser using SheetJS
         const buffer = await file.arrayBuffer()
         parsed = parseExcel(new Uint8Array(buffer))
         if (!parsed || parsed.length === 0) throw new Error('Could not read Excel file. Make sure the first sheet has columns: name, category, days, time, duration, fee, sessions, instructor')
       } else {
-        // Image / PDF → Claude vision API
-        parsed = await parseWithClaude(file)
-        if (!parsed || parsed.length === 0) throw new Error('No classes found in the uploaded file.')
+        throw new Error('Unsupported file type. Please upload a CSV or Excel (.xlsx) file.')
       }
 
       setParsedClasses(parsed)
@@ -613,8 +541,8 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
 
         <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
           Upload your schedule and all classes in both the teacher and student portals will be updated automatically.
-          Supported formats: <strong>PDF, JPG, PNG, Excel (.xlsx), CSV</strong>, or paste a Google Sheets link.
-          <br/>For CSV/Excel, use columns: <code>name, category, days, time, duration, fee, sessions, instructor</code>
+          Supported formats: <strong>Excel (.xlsx) or CSV</strong>, or paste a Google Sheets link.
+          <br/>Use columns: <code>name, category, days, time, duration, fee, sessions, instructor</code>
         </div>
 
         {/* ── Google Sheets URL input ─── */}
@@ -671,7 +599,6 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
                 <>
                   <i className="ti ti-loader-2" style={{fontSize:28,color:'#E8401A',display:'block',marginBottom:8,animation:'spin 1s linear infinite'}} />
                   <div style={{fontWeight:500}}>Reading {uploadName}…</div>
-                  <div style={{fontSize:'var(--fs-xs)',marginTop:4,color:'var(--color-text-secondary)'}}>Claude is extracting class data — this takes about 10 seconds</div>
                 </>
               ) : uploadName && parseError ? (
                 <>
@@ -682,11 +609,11 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
                 <>
                   <i className="ti ti-upload" style={{fontSize:28,color:'#E8401A',display:'block',marginBottom:8}} />
                   <div>Drag & drop your schedule here, or click to browse</div>
-                  <div style={{fontSize:'var(--fs-xs)',marginTop:4,color:'var(--color-text-secondary)'}}>PDF, JPG, PNG, Excel (.xlsx), CSV · max 20 MB</div>
+                  <div style={{fontSize:'var(--fs-xs)',marginTop:4,color:'var(--color-text-secondary)'}}>Excel (.xlsx) or CSV · max 20 MB</div>
                 </>
               )}
             </div>
-            <input id="sched-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx,.xls"
+            <input id="sched-file" type="file" accept=".csv,.xlsx,.xls"
               style={{display:'none'}} onChange={e=>{if(e.target.files[0]) handleFile(e.target.files[0])}} />
 
             {parseError && (
