@@ -241,25 +241,23 @@ export default function StudentDashboard({
 
                   {/* Inline leave form */}
                   {isFormOpen && (
-                    <div style={{marginTop:10, marginLeft:18, background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
+                    <div style={{marginTop:10, marginLeft:18, background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', display:'flex', flexDirection:'column', gap:8}}>
                       <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'var(--color-text-primary)'}}>
                         <i className="ti ti-calendar-minus" style={{marginRight:4, color:'#E8401A'}}/> Request leave — <em>{c.name}</em>
                       </div>
-                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)'}}>
-                        <div>
-                          <label className="form-label">Session date *</label>
-                          <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="form-label">Reason *</label>
-                          <textarea
-                            value={leaveReason}
-                            onChange={e => setLeaveReason(e.target.value)}
-                            placeholder="e.g. Doctor's appointment, sick, travel…"
-                            style={{minHeight:52}}
-                            autoFocus
-                          />
-                        </div>
+                      <div>
+                        <label className="form-label">Session date *</label>
+                        <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{maxWidth:180}} />
+                      </div>
+                      <div>
+                        <label className="form-label">Reason *</label>
+                        <textarea
+                          value={leaveReason}
+                          onChange={e => setLeaveReason(e.target.value)}
+                          placeholder="e.g. Doctor's appointment, sick, travel…"
+                          rows={2}
+                          style={{minHeight:'unset', resize:'none'}}
+                        />
                       </div>
                       <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
                         <button className="btn" style={{fontSize:12}} onClick={() => setLeaveFormFor(null)}>Cancel</button>

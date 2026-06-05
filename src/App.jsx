@@ -511,14 +511,7 @@ export default function App() {
     const { id, ...data } = req
 
     await setDoc(doc(db, 'leaveRequests', lid), data)
-
-    // Optimistic update for the currently logged-in student
-    setSd(d => ({
-      ...d,
-      leaveRequests: d.leaveRequests.find(r => r.id === req.id)
-        ? d.leaveRequests
-        : [...d.leaveRequests, req]
-    }))
+    // onSnapshot listener will update leaveRequests automatically — no optimistic update needed
   }
 
   // ── resolveLeave (teacher approves / declines) ─────────────────
