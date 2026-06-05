@@ -18,5 +18,14 @@ All features and UI must work correctly on both **desktop** and **mobile web bro
 - [Testing](skills/testing.md)
 - [Publish](skills/publish.md)
 - [Code Efficiency Review](skills/code-efficiency.md)
+- [Design Principles](skills/design-principles.md) ← read this before any UI or code change
 
 > Use these skill guides to map features, files, and workflows for safe updates and deployments.
+
+## Learning from corrections
+
+Whenever the user asks to fix or improve something, do two things:
+
+1. **Apply the fix broadly** — if the correction reveals a pattern (e.g. wrong font size, missing label, broken layout), check all similar features in the codebase and apply the same fix proactively, not just to the one that was reported.
+
+2. **Save the principle** — extract the underlying rule and add it to [skills/design-principles.md](skills/design-principles.md) so it applies to all future work. Keep each entry short and actionable. Do not add entries that are already covered.

@@ -12,6 +12,11 @@ function isWeChat() {
   return /MicroMessenger/i.test(navigator.userAgent)
 }
 
+function isInAppBrowser() {
+  const ua = navigator.userAgent
+  return /MicroMessenger|FBAV|FBAN|Instagram|Line|Snapchat|Twitter|TikTok/i.test(ua)
+}
+
 // ── Full-screen WeChat overlay ────────────────────────────────
 function WeChatOverlay() {
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -77,6 +82,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
   const [role, setRole]       = useState('student')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [showInAppOverlay, setShowInAppOverlay] = useState(false)
 
   function checkTeacherAccess(email) {
     if (isApprovedTeacher(email)) return true
@@ -121,6 +127,11 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
         provider: 'google',
       })
     } catch (err) {
+      if (err.code === 'auth/popup-blocked' || isInAppBrowser()) {
+        setShowInAppOverlay(true)
+        setLoading(false)
+        return
+      }
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         setError('Sign-in failed (' + (err.code || 'unknown') + '). Please try again.')
       }
@@ -129,7 +140,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
     }
   }
 
-  if (isWeChat()) return <WeChatOverlay />
+  if (isWeChat() || showInAppOverlay) return <WeChatOverlay />
 
   return (
     <div className={styles.shell}>

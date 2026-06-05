@@ -186,8 +186,8 @@ export default function StudentDashboard({
         </div>
         <div className="stat-card">
           <div className="stat-label">Leave requests</div>
-          <div className="stat-val" style={{color:pendingLeaves.length>0?'#F47B20':'var(--color-text-primary)'}}>{leaveRequests.length}</div>
-          <div className="stat-sub">{pendingLeaves.length>0 ? `${pendingLeaves.length} pending` : 'None pending'}</div>
+          <div className="stat-val" style={{color:leaveRequests.length>0?'#F47B20':'var(--color-text-primary)'}}>{leaveRequests.length}</div>
+          <div className="stat-sub">{leaveRequests.length>0 ? `${leaveRequests.length} logged` : 'None logged'}</div>
         </div>
       </div>
 
@@ -206,11 +206,11 @@ export default function StudentDashboard({
       {/* ── My Classes (with inline leave request) ── */}
       <div className="card">
         <div className="card-hdr">
-          <span className="card-title">My classes ({enrolledClasses.length + pendingEnrollClasses.length + pendingPackPayments.length})</span>
+          <span className="card-title">My classes ({enrolledClasses.length + pendingPackPayments.length})</span>
           <button className="btn" onClick={() => navigate('sschedule')}>Browse classes</button>
         </div>
 
-        {enrolledClasses.length===0 && pendingEnrollClasses.length===0 && pendingPackPayments.length===0 ? (
+        {enrolledClasses.length===0 && pendingPackPayments.length===0 ? (
           <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
             <i className="ti ti-calendar-off" style={{fontSize:28,display:'block',marginBottom:8,opacity:.4}} />
             Not enrolled yet. <span style={{cursor:'pointer',color:'#E8401A',textDecoration:'underline'}} onClick={() => navigate('sschedule')}>Browse classes</span> to sign up.
@@ -271,7 +271,7 @@ export default function StudentDashboard({
                   {/* Flash confirmation */}
                   {justSubmitted && (
                     <div style={{marginTop:6, marginLeft:18, fontSize:'var(--fs-xs)', color:'#27500A'}}>
-                      <i className="ti ti-check" style={{marginRight:4}}/> Leave request submitted — awaiting teacher review.
+                      <i className="ti ti-check" style={{marginRight:4}}/> Leave logged.
                     </div>
                   )}
                 </div>
@@ -365,8 +365,8 @@ export default function StudentDashboard({
               {r.status==='approved' && (
                 <div style={{marginTop:7, marginLeft:4}}>
                   {justMkSubmitted ? (
-                    <div style={{fontSize:'var(--fs-xs)', color:'#0C447C'}}>
-                      <i className="ti ti-check" style={{marginRight:4}}/> Makeup request submitted — awaiting teacher approval.
+                    <div style={{fontSize:'var(--fs-xs)', color:'#27500A'}}>
+                      <i className="ti ti-check" style={{marginRight:4}}/> Makeup class requested.
                     </div>
                   ) : !mk ? (
                     isMkFormOpen ? (

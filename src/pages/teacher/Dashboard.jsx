@@ -17,10 +17,13 @@ export default function Dashboard({
   const pendingPayCount = (pendingPayments||[]).filter(p=>p.status==='pending').length
 
   // Leave & Make-Up tab state
+  // "Pending" = any manually-pending requests or makeup awaiting teacher action
+  // "Resolved" = all other items (includes auto-approved which teachers can bulk review)
   const shownPending  = leaves.filter(r =>
     r.status === 'pending' || r.makeup?.status === 'pending'
   )
   const shownResolved = leaves.filter(r => r.status !== 'pending')
+  const autoApprovedLeaves = leaves.filter(r => r.status === 'approved' && r.autoApprovedAt)
   const approvedLeaves = leaves.filter(r => r.status === 'approved')
   const makeupApproved = approvedLeaves.filter(r => r.makeup?.status === 'approved').length
   const rolloverCount  = approvedLeaves.length - makeupApproved
@@ -124,12 +127,12 @@ export default function Dashboard({
           <div className="stat-sub">Across all classes</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Pending leaves</div>
-          <div className="stat-val" style={{color: shownPending.length>0?'#E8401A':'var(--color-text-primary)'}}>
-            {shownPending.length}
+          <div className="stat-label">Leave requests</div>
+          <div className="stat-val" style={{color: autoApprovedLeaves.length>0?'#F47B20':'var(--color-text-primary)'}}>
+            {autoApprovedLeaves.length}
           </div>
-          <div className="stat-sub" style={{color: shownPending.length>0?'#E8401A':undefined}}>
-            {shownPending.length>0 ? `${shownPending.length} awaiting review` : 'None pending'}
+          <div className="stat-sub" style={{color: autoApprovedLeaves.length>0?'#F47B20':undefined}}>
+            {autoApprovedLeaves.length>0 ? `${autoApprovedLeaves.length} auto-approved` : 'All logged'}
           </div>
         </div>
         <div className="stat-card">
@@ -195,7 +198,7 @@ export default function Dashboard({
 
           return (
             <div key={r.id} style={{borderBottom:'0.5px solid var(--color-border-tertiary)', padding:'12px 0'}}>
-              <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:6}}>
+              <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:6, flexWrap:'wrap'}}>
                 {isMakeupRow ? (
                   <span style={{fontSize:10, padding:'1px 8px', borderRadius:20, background:'rgba(24,95,165,0.1)', color:'#0C447C', fontWeight:500}}>
                     <i className="ti ti-school" style={{marginRight:3}}/>Makeup request
@@ -203,6 +206,11 @@ export default function Dashboard({
                 ) : (
                   <span style={{fontSize:10, padding:'1px 8px', borderRadius:20, background:'rgba(232,64,26,0.08)', color:'#791F1F', fontWeight:500}}>
                     <i className="ti ti-calendar-minus" style={{marginRight:3}}/>Leave request
+                  </span>
+                )}
+                {r.autoApprovedAt && (
+                  <span style={{fontSize:10, padding:'1px 8px', borderRadius:20, background:'rgba(244,123,32,0.12)', color:'#B25E14', fontWeight:500}}>
+                    <i className="ti ti-bolt" style={{marginRight:3}}/>Auto-logged
                   </span>
                 )}
               </div>

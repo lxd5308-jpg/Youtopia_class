@@ -365,15 +365,14 @@ export default function App() {
     }))
   }
 
-  // ── addClassToCart — atomically adds to cart AND pendingEnroll ──
-  // Replaces the two-call pattern (setCart + signUpForClasses) to prevent
-  // the race condition where two rapid Firestore writes could leave
-  // pendingEnroll empty if logout happens between them.
+  // ── addClassToCart — auto-enroll student immediately ──
+  // Students are now enrolled directly (no payment approval needed).
+  // Classes are immediately added to 'enrolled' instead of 'pendingEnroll'.
   function addClassToCart(cls) {
     updateStudentDoc(d => ({
       ...d,
       cart: [...(d.cart||[]).filter(i => i.classId !== cls.id), { classId: cls.id, packageType: 'full' }],
-      pendingEnroll: [...new Set([...(d.pendingEnroll||[]), cls.id])],
+      enrolled: [...new Set([...(d.enrolled||[]), cls.id])],
     }))
   }
 
@@ -505,8 +504,10 @@ export default function App() {
   }
 
   // ── submitLeave (student submits a leave request) ──────────────
+  // Leave requests are now auto-approved (status: 'approved') for immediate effect.
+  // Teachers can review the log later for bulk actions.
   async function submitLeave(leaveReq) {
-    const req = { ...leaveReq, status: 'pending' }
+    const req = { ...leaveReq, status: 'approved', autoApprovedAt: nowStr() }
     const lid = String(req.id)
     const { id, ...data } = req
 
@@ -534,8 +535,10 @@ export default function App() {
   }
 
   // ── requestMakeup (student requests a makeup class) ────────────
+  // Makeup requests are now auto-approved for immediate effect.
+  // Teachers can review the log later for bulk actions.
   async function requestMakeup(leaveId, makeupData) {
-    const makeup = { ...makeupData, status: 'pending', requestedAt: nowStr() }
+    const makeup = { ...makeupData, status: 'approved', autoApprovedAt: nowStr(), requestedAt: nowStr() }
     const lid    = String(leaveId)
 
     await setDoc(doc(db, 'leaveRequests', lid), { makeup }, { merge: true })

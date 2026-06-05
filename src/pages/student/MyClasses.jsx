@@ -9,7 +9,7 @@ export default function MyClasses({
 }) {
   const [tab, setTab] = useState('current')
   const enrolledIds = new Set(enrolled)
-  const pendingIds  = new Set(pendingEnroll||[])
+  const pendingIds  = new Set(pendingEnroll)
 
   // Leave request state — keyed by classId
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)  // classId with form open
@@ -217,40 +217,7 @@ export default function MyClasses({
           <span className="card-title">My enrolled classes</span>
         </div>
 
-        {/* Pending payment notice */}
-        {pendingCls.length > 0 && (
-          <div style={{ marginBottom:'var(--sp-sm)', background:'rgba(245,184,0,0.08)', border:'0.5px solid rgba(245,184,0,0.35)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)' }}>
-            <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'#633806', marginBottom:4 }}>
-              <i className="ti ti-clock" /> Awaiting payment confirmation:
-            </div>
-            {pendingCls.map(c => (
-              <div key={c.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'3px 0' }}>
-                <span className="dot" style={{ background:c.color }} />
-                <span style={{ fontSize:'var(--fs-sm)', fontFamily:'var(--font)', flex:1 }}>{c.name}</span>
-                <span className="pill pill-warn" style={{ fontSize:10 }}>Pending</span>
-                <button
-                  className="btn"
-                  style={{ fontSize:10, padding:'2px 8px', color:'#791F1F', borderColor:'rgba(163,45,45,0.3)' }}
-                  onClick={() => {
-                    if (window.confirm(`Cancel pending enrollment for ${c.name}?`)) {
-                      setPendingEnroll(prev => prev.filter(id => id !== c.id))
-                    }
-                  }}
-                >
-                  <i className="ti ti-x" /> Cancel
-                </button>
-              </div>
-            ))}
-            <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:4 }}>
-              Complete checkout in{' '}
-              <span style={{ cursor:'pointer', color:'#E8401A', textDecoration:'underline' }} onClick={() => navigate('shub')}>
-                Payments
-              </span>
-            </div>
-          </div>
-        )}
-
-        {myClasses.length === 0 && pendingCls.length === 0 ? (
+        {myClasses.length === 0 ? (
           <div style={{ textAlign:'center', padding:'var(--sp-lg) 0', color:'var(--color-text-secondary)', fontSize:'var(--fs-sm)' }}>
             <i className="ti ti-clipboard-list" style={{ fontSize:28, display:'block', marginBottom:8, opacity:.4 }} />
             Not enrolled yet.{' '}
@@ -262,8 +229,6 @@ export default function MyClasses({
         ) : myClasses.map(c => {
           const classLeaves = leaveRequests.filter(r => r.className === c.name)
           const approved    = classLeaves.filter(r => r.status === 'approved').length
-          const pending     = classLeaves.filter(r => r.status === 'pending').length
-          const denied      = classLeaves.filter(r => r.status === 'denied').length
           const isFormOpen  = leaveFormFor === c.id
           const justSubmitted = leaveSubmitted[c.id]
 
@@ -281,13 +246,7 @@ export default function MyClasses({
                   {classLeaves.length > 0 && (
                     <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:5 }}>
                       {approved > 0 && (
-                        <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(59,109,17,0.1)', color:'#27500A', fontWeight:500 }}>✓ {approved} approved</span>
-                      )}
-                      {pending > 0 && (
-                        <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(245,184,0,0.12)', color:'#633806', fontWeight:500 }}>⏳ {pending} pending</span>
-                      )}
-                      {denied > 0 && (
-                        <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(163,45,45,0.08)', color:'#791F1F', fontWeight:500 }}>✗ {denied} declined</span>
+                        <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(59,109,17,0.1)', color:'#27500A', fontWeight:500 }}>✓ {approved} logged</span>
                       )}
                     </div>
                   )}
@@ -338,7 +297,7 @@ export default function MyClasses({
               {/* ── Submitted flash ── */}
               {justSubmitted && (
                 <div style={{ marginTop:8, marginLeft:20, fontSize:'var(--fs-xs)', color:'#27500A' }}>
-                  <i className="ti ti-check" style={{ marginRight:4 }}/> Leave request submitted — awaiting teacher review.
+                  <i className="ti ti-check" style={{ marginRight:4 }}/> Leave logged. You can request a makeup class below if needed.
                 </div>
               )}
 
@@ -384,8 +343,8 @@ export default function MyClasses({
                       {lr.status==='approved' && (
                         <div style={{ marginTop:6 }}>
                           {mkSubmitted[lr.id] ? (
-                            <div style={{ fontSize:'var(--fs-xs)', color:'#0C447C' }}>
-                              <i className="ti ti-check" style={{ marginRight:4 }}/> Makeup request submitted — awaiting teacher approval.
+                            <div style={{ fontSize:'var(--fs-xs)', color:'#27500A' }}>
+                              <i className="ti ti-check" style={{ marginRight:4 }}/> Makeup class requested.
                             </div>
                           ) : !lr.makeup ? (
                             makeupFormFor===lr.id ? (
@@ -436,27 +395,17 @@ export default function MyClasses({
           const approvedLeaves = leaveRequests.filter(r =>
             r.status === 'approved' && myClasses.some(c => c.name === r.className)
           )
-          const totalPending = leaveRequests.filter(r =>
-            r.status === 'pending' && myClasses.some(c => c.name === r.className)
-          ).length
           const makeupApproved = approvedLeaves.filter(r => r.makeup?.status==='approved').length
           const rollover       = approvedLeaves.length - makeupApproved
-          if (approvedLeaves.length === 0 && totalPending === 0) return null
+          if (approvedLeaves.length === 0) return null
           return (
             <div style={{ marginTop:'var(--sp-md)', background:'rgba(24,95,165,0.06)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#0C447C', lineHeight:1.8 }}>
               <i className="ti ti-rotate-clockwise" style={{ marginRight:5 }} />
               <strong>Rollover estimate:</strong>{' '}
-              {approvedLeaves.length > 0 && (
-                <span>
-                  <strong>{approvedLeaves.length}</strong> approved leave{approvedLeaves.length !== 1 ? 's' : ''}
-                  {makeupApproved > 0 && <span> · <strong>{makeupApproved}</strong> makeup{makeupApproved !== 1 ? 's' : ''} approved</span>}
-                  {' → '}
-                  <strong>{rollover}</strong> class{rollover !== 1 ? 'es' : ''} eligible to roll over.{' '}
-                </span>
-              )}
-              {totalPending > 0 && (
-                <span><strong>{totalPending}</strong> leave{totalPending !== 1 ? 's' : ''} still awaiting teacher approval. </span>
-              )}
+              <strong>{approvedLeaves.length}</strong> logged leave{approvedLeaves.length !== 1 ? 's' : ''}
+              {makeupApproved > 0 && <span> · <strong>{makeupApproved}</strong> makeup{makeupApproved !== 1 ? 's' : ''} approved</span>}
+              {' → '}
+              <strong>{rollover}</strong> class{rollover !== 1 ? 'es' : ''} eligible to roll over.{' '}
               Contact the studio to confirm your rollover classes.
             </div>
           )
@@ -562,7 +511,7 @@ export default function MyClasses({
         )
       })}
 
-      {myClasses.length === 0 && pendingCls.length === 0 && allPacks.length === 0 && (
+      {myClasses.length === 0 && allPacks.length === 0 && (
         <div className="card" style={{ textAlign:'center', padding:'var(--sp-lg)' }}>
           <i className="ti ti-package" style={{ fontSize:36, display:'block', marginBottom:'var(--sp-sm)', opacity:.4, color:'var(--color-text-secondary)' }} />
           <div style={{ fontSize:'var(--fs-body)', fontWeight:500, marginBottom:8 }}>No active 10-hour packs</div>
