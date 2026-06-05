@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { auth } from '../config/firebase'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+
+function isMobile() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
 import { isApprovedTeacher } from '../config'
 import styles from './LoginPage.module.css'
 
@@ -100,6 +104,13 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
       const initials = fbUser.displayName
         ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
         : fbUser.email.slice(0, 2).toUpperCase()
+
+      if (isMobile()) {
+        // Reload to clear any ghost overlay left by the Google popup
+        localStorage.setItem('pendingLoginRole', role)
+        window.location.reload()
+        return
+      }
 
       onLogin({
         role,

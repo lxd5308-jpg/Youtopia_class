@@ -4,7 +4,7 @@ import {
   doc, collection, onSnapshot, setDoc, getDoc, addDoc,
   query, where,
 } from 'firebase/firestore'
-import { signOut } from 'firebase/auth'
+import { signOut, onAuthStateChanged } from 'firebase/auth'
 import LoginPage from './pages/LoginPage'
 import AppShell from './components/AppShell'
 import { CLASSES, SEMESTER } from './data/mockData'
@@ -52,6 +52,23 @@ export default function App() {
   const studentEmailRef = useRef(null)
   const studentUnsubRef = useRef(null)
   const globalUnsubRef  = useRef(null)
+
+  // ── Auto-restore session after mobile reload ──────────────────
+  useEffect(() => {
+    const savedRole = localStorage.getItem('pendingLoginRole')
+    if (!savedRole) return  // no pending restore
+
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      if (!fbUser) return
+      unsub()
+      localStorage.removeItem('pendingLoginRole')
+      const initials = fbUser.displayName
+        ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()
+        : fbUser.email.slice(0,2).toUpperCase()
+      handleLogin({ role: savedRole, name: fbUser.displayName || fbUser.email, initials, email: fbUser.email, avatar: fbUser.photoURL, provider: 'google' })
+    })
+    return () => unsub()
+  }, [])  // eslint-disable-line
 
   // ── Start global Firestore listeners (called after login) ──────
   function startGlobalListeners() {
