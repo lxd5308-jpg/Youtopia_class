@@ -125,13 +125,14 @@ export default function AppShell(props) {
               ? <img src={user.avatar} alt={user.name} className={styles.avatar} style={{objectFit:'cover'}} />
               : <div className={styles.avatar} style={{background:isTeacher?'#E8401A':'#F5B800'}}>{user.initials}</div>
             }
-            {/* Mobile sign out via avatar long-press area */}
+            {/* Sign out — visible on mobile in topbar */}
             <button
-              className={styles.navItem}
               onClick={onLogout}
-              style={{display:'none'}}
-              id="mobile-signout"
-            />
+              className={styles.mobileSignOut}
+              title="Sign out"
+            >
+              <i className="ti ti-logout" />
+            </button>
           </div>
         </header>
 

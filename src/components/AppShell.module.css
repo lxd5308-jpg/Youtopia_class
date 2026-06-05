@@ -226,6 +226,20 @@
   padding: 0 3px;
 }
 
+/* ── Mobile sign out button (topbar, hidden on desktop) ──────── */
+.mobileSignOut {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 18px;
+  padding: 4px 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: var(--r-sm);
+}
+
 /* ── Mobile overrides ───────────────────────────────────────── */
 @media (max-width: 768px) {
   .sidebar    { display: none; }
@@ -239,6 +253,8 @@
   .topbarLogo  { display: flex; }
   .pageTitle   { display: none; }
   .roleBadge   { display: none; }
+
+  .mobileSignOut { display: flex; align-items: center; justify-content: center; }
 
   .content {
     padding: var(--sp-sm);
