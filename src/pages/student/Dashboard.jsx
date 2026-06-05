@@ -247,7 +247,7 @@ export default function StudentDashboard({
                       </div>
                       <div>
                         <label className="form-label">Session date *</label>
-                        <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{maxWidth:180}} />
+                        <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{maxWidth:180, fontFamily:'var(--font)', fontSize:'var(--fs-body)'}} />
                       </div>
                       <div>
                         <label className="form-label">Reason *</label>
@@ -256,7 +256,7 @@ export default function StudentDashboard({
                           onChange={e => setLeaveReason(e.target.value)}
                           placeholder="e.g. Doctor's appointment, sick, travel…"
                           rows={2}
-                          style={{minHeight:'unset', resize:'none'}}
+                          style={{minHeight:'unset', resize:'none', fontFamily:'var(--font)', fontSize:'var(--fs-body)'}}
                         />
                       </div>
                       <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>

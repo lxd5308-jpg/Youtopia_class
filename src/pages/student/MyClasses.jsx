@@ -111,7 +111,7 @@ export default function MyClasses({
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)' }}>
           <div>
             <label className="form-label">Class to attend *</label>
-            <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
+            <select value={mkClass} onChange={e => setMkClass(e.target.value)} style={{ fontFamily:'var(--font)', fontSize:'var(--fs-body)' }}>
               <option value="">— Select class —</option>
               {classes.map(c => (
                 <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
@@ -122,7 +122,7 @@ export default function MyClasses({
             <label className="form-label">
               Preferred date <span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>(optional)</span>
             </label>
-            <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} />
+            <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} style={{ fontFamily:'var(--font)', fontSize:'var(--fs-body)' }} />
           </div>
         </div>
         <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
@@ -316,7 +316,7 @@ export default function MyClasses({
                   </div>
                   <div>
                     <label className="form-label">Session date *</label>
-                    <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{ maxWidth:180 }} />
+                    <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{ maxWidth:180, fontFamily:'var(--font)', fontSize:'var(--fs-body)' }} />
                   </div>
                   <div>
                     <label className="form-label">Reason *</label>
@@ -325,7 +325,7 @@ export default function MyClasses({
                       onChange={e => setLeaveReason(e.target.value)}
                       placeholder="e.g. Doctor's appointment, sick, travel…"
                       rows={2}
-                      style={{ minHeight:'unset', resize:'none' }}
+                      style={{ minHeight:'unset', resize:'none', fontFamily:'var(--font)', fontSize:'var(--fs-body)' }}
                     />
                   </div>
                   <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
