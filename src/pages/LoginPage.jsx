@@ -1,12 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { auth } from '../config/firebase'
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth'
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { isApprovedTeacher } from '../config'
 import styles from './LoginPage.module.css'
-
-function isMobile() {
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-}
 
 function isWeChat() {
   return /MicroMessenger/i.test(navigator.userAgent)
@@ -74,62 +70,22 @@ function WeChatOverlay() {
 }
 
 export default function LoginPage({ onLogin, teacherEmails=[] }) {
-  const [role, setRole]           = useState(() => localStorage.getItem('pendingLoginRole') || 'student')
-  const [loading, setLoading]     = useState(false)
-  const [redirecting, setRedirecting] = useState(!!localStorage.getItem('pendingLoginRole'))
-  const [error, setError]         = useState('')
+  const [role, setRole]       = useState('student')
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
 
   function checkTeacherAccess(email) {
     if (isApprovedTeacher(email)) return true
     return teacherEmails.map(e => e.toLowerCase()).includes((email||'').toLowerCase())
   }
 
-  function processRedirectUser(fbUser, loginRole) {
-    if (loginRole === 'teacher' && !checkTeacherAccess(fbUser.email)) {
-      auth.signOut()
-      setError(
-        'This account is not registered as a teacher. ' +
-        'Please sign in as a Student, or contact the academy admin to request teacher access.'
-      )
-      return
-    }
-    const initials = fbUser.displayName
-      ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-      : fbUser.email.slice(0, 2).toUpperCase()
-    onLogin({ role: loginRole, name: fbUser.displayName || fbUser.email, initials, email: fbUser.email, avatar: fbUser.photoURL, provider: 'google' })
-  }
-
-  // Handle the result when Google redirects back to the app (mobile flow)
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then(result => {
-        if (!result) { setRedirecting(false); return }
-        const savedRole = localStorage.getItem('pendingLoginRole') || 'student'
-        localStorage.removeItem('pendingLoginRole')
-        processRedirectUser(result.user, savedRole)
-      })
-      .catch(err => {
-        setRedirecting(false)
-        if (err.code === 'auth/unauthorized-domain') {
-          setError('This domain is not authorized for sign-in. Please contact the admin.')
-        } else {
-          setError('Sign-in failed (' + (err.code || err.message) + '). Please try again.')
-        }
-      })
-  }, []) // eslint-disable-line
-
   async function handleGoogleLogin() {
     setLoading(true)
     setError('')
     try {
       const provider = new GoogleAuthProvider()
-      if (isMobile()) {
-        localStorage.setItem('pendingLoginRole', role)
-        await signInWithRedirect(auth, provider)
-        return  // browser navigates away; code below won't run
-      }
-      const result = await signInWithPopup(auth, provider)
-      const fbUser = result.user
+      const result   = await signInWithPopup(auth, provider)
+      const fbUser   = result.user
 
       if (role === 'teacher' && !checkTeacherAccess(fbUser.email)) {
         await auth.signOut()
@@ -155,7 +111,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
       })
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-        setError('Sign-in failed. Please try again.')
+        setError('Sign-in failed (' + (err.code || 'unknown') + '). Please try again.')
       }
     } finally {
       setLoading(false)
@@ -163,15 +119,6 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
   }
 
   if (isWeChat()) return <WeChatOverlay />
-
-  if (redirecting) return (
-    <div style={{position:'fixed',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'#fff',gap:16,fontFamily:'system-ui,sans-serif'}}>
-      <div style={{fontSize:28,fontWeight:800,color:'#E8401A'}}>Youtopia</div>
-      <div style={{fontSize:13,color:'#888',marginBottom:8}}>Dance Academy</div>
-      <svg style={{animation:'spin 1s linear infinite'}} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8401A" strokeWidth="2.5" strokeLinecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>
-      <div style={{fontSize:14,color:'#555'}}>Completing sign-in…</div>
-    </div>
-  )
 
   return (
     <div className={styles.shell}>

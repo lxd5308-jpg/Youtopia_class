@@ -6,5 +6,6 @@ This is a live class management app that is used by 10+ users. Unless instructed
 - [Review & Modification](skills/review-and-modification.md)
 - [Testing](skills/testing.md)
 - [Publish](skills/publish.md)
+- [Code Efficiency Review](skills/code-efficiency.md)
 
 > Use these skill guides to map features, files, and workflows for safe updates and deployments.
