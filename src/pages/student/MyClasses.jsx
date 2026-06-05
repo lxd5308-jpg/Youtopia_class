@@ -27,6 +27,7 @@ export default function MyClasses({
   const [loggingPack,    setLoggingPack]    = useState({})
   const [selMins,        setSelMins]        = useState({})
   const [selTeacher,     setSelTeacher]     = useState({})
+  const [selDate,        setSelDate]        = useState({})
 
   const myClasses  = classes.filter(c => enrolledIds.has(c.id))
   const pendingCls = classes.filter(c => pendingIds.has(c.id) && !enrolledIds.has(c.id))
@@ -85,12 +86,17 @@ export default function MyClasses({
     const mins    = Number(selMins[packId] || 60)
     const hours   = parseFloat((mins / 60).toFixed(2))
     const teacher = (selTeacher[packId] || '').trim()
+    const today   = new Date().toISOString().slice(0, 10)
+    const iso     = selDate[packId] || today
+    const [y, m, d] = iso.split('-').map(Number)
+    const date    = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     setLoggingPack(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name, hours, teacher)
+    logSession(packId, user?.email, user?.name, hours, teacher, date)
     setTimeout(() => {
       setLoggingPack(l => ({ ...l, [packId]: false }))
       setSelMins(m => ({ ...m, [packId]: '' }))
       setSelTeacher(t => ({ ...t, [packId]: '' }))
+      setSelDate(dd => ({ ...dd, [packId]: '' }))
     }, 800)
   }
 
@@ -525,6 +531,14 @@ export default function MyClasses({
                   value={selTeacher[pack.id] ?? ''}
                   onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
                   style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
+                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Class date</span>
+                <input
+                  type="date"
+                  value={selDate[pack.id] || new Date().toISOString().slice(0, 10)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
+                  style={{width:120, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
                 />
                 <button className="btn btn-p" disabled={loggingPack[pack.id]} onClick={() => handleLogSession(pack.id)}>
                   {loggingPack[pack.id]

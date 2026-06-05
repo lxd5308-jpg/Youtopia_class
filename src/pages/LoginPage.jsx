@@ -1,11 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { auth } from '../config/firebase'
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth'
 import { isApprovedTeacher } from '../config'
 import styles from './LoginPage.module.css'
 
+function isMobile() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
+function isWeChat() {
+  return /MicroMessenger/i.test(navigator.userAgent)
+}
+
 export default function LoginPage({ onLogin, teacherEmails=[] }) {
-  const [role, setRole]       = useState('student')
+  const [role, setRole]       = useState(() => localStorage.getItem('pendingLoginRole') || 'student')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
@@ -14,13 +22,45 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
     return teacherEmails.map(e => e.toLowerCase()).includes((email||'').toLowerCase())
   }
 
+  function processRedirectUser(fbUser, loginRole) {
+    if (loginRole === 'teacher' && !checkTeacherAccess(fbUser.email)) {
+      auth.signOut()
+      setError(
+        'This account is not registered as a teacher. ' +
+        'Please sign in as a Student, or contact the academy admin to request teacher access.'
+      )
+      return
+    }
+    const initials = fbUser.displayName
+      ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+      : fbUser.email.slice(0, 2).toUpperCase()
+    onLogin({ role: loginRole, name: fbUser.displayName || fbUser.email, initials, email: fbUser.email, avatar: fbUser.photoURL, provider: 'google' })
+  }
+
+  // Handle the result when Google redirects back to the app (mobile flow)
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(result => {
+        if (!result) return
+        const savedRole = localStorage.getItem('pendingLoginRole') || 'student'
+        localStorage.removeItem('pendingLoginRole')
+        processRedirectUser(result.user, savedRole)
+      })
+      .catch(() => setError('Sign-in failed. Please try again.'))
+  }, []) // eslint-disable-line
+
   async function handleGoogleLogin() {
     setLoading(true)
     setError('')
     try {
       const provider = new GoogleAuthProvider()
-      const result   = await signInWithPopup(auth, provider)
-      const fbUser   = result.user
+      if (isMobile()) {
+        localStorage.setItem('pendingLoginRole', role)
+        await signInWithRedirect(auth, provider)
+        return  // browser navigates away; code below won't run
+      }
+      const result = await signInWithPopup(auth, provider)
+      const fbUser = result.user
 
       if (role === 'teacher' && !checkTeacherAccess(fbUser.email)) {
         await auth.signOut()
@@ -90,7 +130,14 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
           </div>
         </div>
 
-        {error && (
+        {isWeChat() && (
+          <div className={styles.errorMsg}>
+            <i className="ti ti-alert-circle" /> Google sign-in is not supported in WeChat.
+            Please tap <strong>···</strong> (top-right) and choose <strong>Open in Browser</strong>.
+          </div>
+        )}
+
+        {!isWeChat() && error && (
           <div className={styles.errorMsg}>
             <i className="ti ti-alert-circle" /> {error}
           </div>
@@ -99,7 +146,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
         <button
           className={styles.authBtn}
           onClick={handleGoogleLogin}
-          disabled={loading}
+          disabled={loading || isWeChat()}
         >
           {loading
             ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Signing in…</>

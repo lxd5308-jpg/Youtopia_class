@@ -541,21 +541,30 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
 // ─────────────────────────────────────────────────────────────
 // 10-SESSION PACKS TAB
 // ─────────────────────────────────────────────────────────────
+const todayISO = () => new Date().toISOString().slice(0, 10)
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
   const [logging,    setLogging]    = useState({})
   const [selMins,    setSelMins]    = useState({})
   const [selTeacher, setSelTeacher] = useState({})
+  const [selDate,    setSelDate]    = useState({})
 
   function handleLog(packId) {
     const mins    = Number(selMins[packId] || 60)
     const hours   = parseFloat((mins / 60).toFixed(2))
     const teacher = (selTeacher[packId] || '').trim()
+    const date    = fmtDate(selDate[packId] || todayISO())
     setLogging(l => ({ ...l, [packId]: true }))
-    logSession(packId, user?.email, user?.name, hours, teacher)
+    logSession(packId, user?.email, user?.name, hours, teacher, date)
     setTimeout(() => {
       setLogging(l => ({ ...l, [packId]: false }))
       setSelMins(m => ({ ...m, [packId]: '' }))
       setSelTeacher(t => ({ ...t, [packId]: '' }))
+      setSelDate(d => ({ ...d, [packId]: '' }))
     }, 800)
   }
 
@@ -648,6 +657,14 @@ function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
                   value={selTeacher[pack.id] ?? ''}
                   onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
                   style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                />
+                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Class date</span>
+                <input
+                  type="date"
+                  value={selDate[pack.id] || todayISO()}
+                  max={todayISO()}
+                  onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
+                  style={{width:120, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
                 />
                 <button
                   className="btn btn-p"

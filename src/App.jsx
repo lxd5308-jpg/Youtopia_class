@@ -444,8 +444,8 @@ export default function App() {
   }
 
   // ── logSession ─────────────────────────────────────────────────
-  async function logSession(packId, studentEmail, studentName, hours = 1, teacher = '') {
-    const entry = { date: nowStr(), hours, ...(teacher ? { teacher } : {}) }
+  async function logSession(packId, studentEmail, studentName, hours = 1, teacher = '', date = '') {
+    const entry = { date: date || nowStr(), hours, ...(teacher ? { teacher } : {}) }
     const addHours = (prev) => parseFloat(Math.min((prev||0) + hours, 10).toFixed(1))
 
     // Optimistic update for the logged-in student
