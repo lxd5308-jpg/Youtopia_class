@@ -12,10 +12,72 @@ function isWeChat() {
   return /MicroMessenger/i.test(navigator.userAgent)
 }
 
+// ── Full-screen WeChat overlay ────────────────────────────────
+function WeChatOverlay() {
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  return (
+    <div style={{
+      position:'fixed', inset:0, background:'#fff',
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      padding:'32px 24px', zIndex:9999, textAlign:'center', fontFamily:'system-ui, sans-serif',
+    }}>
+      {/* Logo */}
+      <div style={{fontSize:28, fontWeight:800, color:'#E8401A', marginBottom:4, letterSpacing:'-0.5px'}}>
+        Youtopia
+      </div>
+      <div style={{fontSize:13, color:'#888', marginBottom:32}}>Dance Academy</div>
+
+      {/* Icon */}
+      <div style={{width:64, height:64, borderRadius:'50%', background:'#FFF0ED', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:20}}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#E8401A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+      </div>
+
+      <div style={{fontSize:17, fontWeight:700, color:'#1a1a1a', marginBottom:8}}>
+        请在浏览器中打开
+      </div>
+      <div style={{fontSize:13, color:'#555', marginBottom:28, lineHeight:1.7}}>
+        微信内不支持 Google 登录。<br/>请按以下步骤用手机浏览器打开：
+      </div>
+
+      {/* Steps */}
+      <div style={{width:'100%', maxWidth:300, textAlign:'left', display:'flex', flexDirection:'column', gap:14, marginBottom:32}}>
+        <div style={{display:'flex', gap:12, alignItems:'flex-start'}}>
+          <div style={{width:26, height:26, borderRadius:'50%', background:'#E8401A', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0}}>1</div>
+          <div style={{fontSize:14, color:'#333', lineHeight:1.6}}>
+            点击右上角 <strong style={{background:'#f0f0f0', padding:'1px 6px', borderRadius:4}}>···</strong> 按钮
+          </div>
+        </div>
+        <div style={{display:'flex', gap:12, alignItems:'flex-start'}}>
+          <div style={{width:26, height:26, borderRadius:'50%', background:'#E8401A', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0}}>2</div>
+          <div style={{fontSize:14, color:'#333', lineHeight:1.6}}>
+            选择 <strong>「在浏览器打开」</strong>
+            {isIOS ? '（Safari）' : '（系统浏览器）'}
+          </div>
+        </div>
+        <div style={{display:'flex', gap:12, alignItems:'flex-start'}}>
+          <div style={{width:26, height:26, borderRadius:'50%', background:'#E8401A', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0}}>3</div>
+          <div style={{fontSize:14, color:'#333', lineHeight:1.6}}>
+            在浏览器中用 Google 账号登录即可 ✓
+          </div>
+        </div>
+      </div>
+
+      <div style={{fontSize:12, color:'#aaa', lineHeight:1.6}}>
+        Open in browser · then sign in with Google
+      </div>
+    </div>
+  )
+}
+
 export default function LoginPage({ onLogin, teacherEmails=[] }) {
-  const [role, setRole]       = useState(() => localStorage.getItem('pendingLoginRole') || 'student')
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [role, setRole]           = useState(() => localStorage.getItem('pendingLoginRole') || 'student')
+  const [loading, setLoading]     = useState(false)
+  const [redirecting, setRedirecting] = useState(!!localStorage.getItem('pendingLoginRole'))
+  const [error, setError]         = useState('')
 
   function checkTeacherAccess(email) {
     if (isApprovedTeacher(email)) return true
@@ -41,12 +103,19 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
   useEffect(() => {
     getRedirectResult(auth)
       .then(result => {
-        if (!result) return
+        if (!result) { setRedirecting(false); return }
         const savedRole = localStorage.getItem('pendingLoginRole') || 'student'
         localStorage.removeItem('pendingLoginRole')
         processRedirectUser(result.user, savedRole)
       })
-      .catch(() => setError('Sign-in failed. Please try again.'))
+      .catch(err => {
+        setRedirecting(false)
+        if (err.code === 'auth/unauthorized-domain') {
+          setError('This domain is not authorized for sign-in. Please contact the admin.')
+        } else {
+          setError('Sign-in failed (' + (err.code || err.message) + '). Please try again.')
+        }
+      })
   }, []) // eslint-disable-line
 
   async function handleGoogleLogin() {
@@ -93,6 +162,17 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
     }
   }
 
+  if (isWeChat()) return <WeChatOverlay />
+
+  if (redirecting) return (
+    <div style={{position:'fixed',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'#fff',gap:16,fontFamily:'system-ui,sans-serif'}}>
+      <div style={{fontSize:28,fontWeight:800,color:'#E8401A'}}>Youtopia</div>
+      <div style={{fontSize:13,color:'#888',marginBottom:8}}>Dance Academy</div>
+      <svg style={{animation:'spin 1s linear infinite'}} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8401A" strokeWidth="2.5" strokeLinecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>
+      <div style={{fontSize:14,color:'#555'}}>Completing sign-in…</div>
+    </div>
+  )
+
   return (
     <div className={styles.shell}>
       <div className={styles.card}>
@@ -130,14 +210,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
           </div>
         </div>
 
-        {isWeChat() && (
-          <div className={styles.errorMsg}>
-            <i className="ti ti-alert-circle" /> Google sign-in is not supported in WeChat.
-            Please tap <strong>···</strong> (top-right) and choose <strong>Open in Browser</strong>.
-          </div>
-        )}
-
-        {!isWeChat() && error && (
+        {error && (
           <div className={styles.errorMsg}>
             <i className="ti ti-alert-circle" /> {error}
           </div>
@@ -146,7 +219,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
         <button
           className={styles.authBtn}
           onClick={handleGoogleLogin}
-          disabled={loading || isWeChat()}
+          disabled={loading}
         >
           {loading
             ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Signing in…</>
