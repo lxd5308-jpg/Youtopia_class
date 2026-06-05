@@ -156,10 +156,6 @@ export default function AppShell(props) {
               {item.badge ? <span className={styles.bottomNavBadge}>{item.badge}</span> : null}
             </button>
           ))}
-          <button className={styles.bottomNavItem} onClick={onLogout}>
-            <i className="ti ti-logout" />
-            <span>Sign out</span>
-          </button>
         </div>
       </nav>
     </div>
