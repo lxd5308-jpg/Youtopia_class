@@ -19,12 +19,28 @@ const PAY_METHODS = [
 ]
 
 
-// Read uploaded file as data URL for preview/storage
-function readAsDataUrl(file) {
+// Compress image to max 800px wide at 70% quality — keeps well under Firestore's 1MB doc limit
+function compressImage(file) {
   return new Promise((resolve) => {
-    if (!file) { resolve(null); return }
+    // PDFs can't be compressed — read as-is (teacher sees filename only)
+    if (file.type === 'application/pdf') {
+      resolve({ name: file.name, dataUrl: null, type: file.type })
+      return
+    }
     const reader = new FileReader()
-    reader.onload = (e) => resolve({ name: file.name, dataUrl: e.target.result, type: file.type })
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 800
+        const scale  = img.width > MAX ? MAX / img.width : 1
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve({ name: file.name, dataUrl: canvas.toDataURL('image/jpeg', 0.7), type: 'image/jpeg' })
+      }
+      img.src = e.target.result
+    }
     reader.readAsDataURL(file)
   })
 }
@@ -95,35 +111,41 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
     return Object.keys(e).length === 0
   }
 
-  function submitPayment() {
+  async function submitPayment() {
     if (submitting) return
     if (!validate()) return
     setSubmitting(true)
-    const packItems = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
-    const submission = {
-      id:           Date.now(),
-      studentName:  studentName || user?.name  || 'Student',
-      studentEmail: user?.email || '',
-      items: [
-        ...cartClasses.map(i => ({
-          classId:   i.classId,
-          className: i.cls.name,
-          pkgType:   i.pkgType,
-          price:     calcPrice(i.cls, i.pkgType),
-        })),
-        ...packItems,
-      ],
-      method:      payMethod,
-      note:        note.trim(),
-      receiptFile: receiptFile?.name || null,
-      receiptDataUrl: receiptFile?.dataUrl || null,
-      total,
-      status:      'pending',
-      submittedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+    try {
+      const packItems = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
+      const submission = {
+        id:           Date.now(),
+        studentName:  studentName || user?.name  || 'Student',
+        studentEmail: user?.email || '',
+        items: [
+          ...cartClasses.map(i => ({
+            classId:   i.classId,
+            className: i.cls.name,
+            pkgType:   i.pkgType,
+            price:     calcPrice(i.cls, i.pkgType),
+          })),
+          ...packItems,
+        ],
+        method:         payMethod,
+        note:           note.trim(),
+        receiptFile:    receiptFile?.name     || null,
+        receiptDataUrl: receiptFile?.dataUrl  || null,
+        total,
+        status:      'pending',
+        submittedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+      }
+      setPendingPayments(p => [...p, submission])
+      setCart([])
+      setSubmitted(true)
+    } catch (err) {
+      console.error('Payment submission failed:', err)
+      setErrors(e => ({ ...e, submit: 'Submission failed. Please try again.' }))
+      setSubmitting(false)
     }
-    setPendingPayments(p => [...p, submission])
-    setCart([])
-    setSubmitted(true)
   }
 
   if (submitted) {
@@ -297,7 +319,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
               )}
             </div>
             <input id="receipt-up" type="file" accept=".jpg,.jpeg,.png,.pdf" style={{display:'none'}}
-              onChange={async e => { const f=e.target.files[0]; const r=f?await readAsDataUrl(f):null; setReceiptFile(r); setErrors(er=>({...er,receipt:null})) }} />
+              onChange={async e => { const f=e.target.files[0]; if(!f) return; const r=await compressImage(f); setReceiptFile(r); setErrors(er=>({...er,receipt:null})) }} />
             {errors.receipt && <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>{errors.receipt}</div>}
           </div>
 
@@ -383,27 +405,32 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
     setErrors(e); return Object.keys(e).length === 0
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!validate()) return
-    const className = purchaseType === 'class' ? selCls?.name
-                    : purchaseType === '10pack' ? '10-hour pack'
-                    : 'Drop-in (Adult)'
-    const submission = {
-      id:           Date.now(),
-      studentName:  studentName || user?.name  || 'Student',
-      studentEmail: user?.email || '',
-      items: [{ classId: selCls?.id || null, className, pkgType: purchaseType, price }],
-      method:      payMethod,
-      note:        note.trim(),
-      receiptFile: receiptFile?.name || null,
-      receiptDataUrl: receiptFile?.dataUrl || null,
-      total:       price,
-      status:      'pending',
-      submittedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+    try {
+      const className = purchaseType === 'class' ? selCls?.name
+                      : purchaseType === '10pack' ? '10-hour pack'
+                      : 'Drop-in (Adult)'
+      const submission = {
+        id:             Date.now(),
+        studentName:    studentName || user?.name || 'Student',
+        studentEmail:   user?.email || '',
+        items: [{ classId: selCls?.id || null, className, pkgType: purchaseType, price }],
+        method:         payMethod,
+        note:           note.trim(),
+        receiptFile:    receiptFile?.name    || null,
+        receiptDataUrl: receiptFile?.dataUrl || null,
+        total:          price,
+        status:         'pending',
+        submittedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+      }
+      setPendingPayments(p => [...p, submission])
+      setSubmitted(true)
+      setSelectedClass(''); setCustomAmount(''); setNote(''); setReceiptFile(null); setErrors({})
+    } catch (err) {
+      console.error('Payment submission failed:', err)
+      setErrors(e => ({ ...e, submit: 'Submission failed. Please try again.' }))
     }
-    setPendingPayments(p => [...p, submission])
-    setSubmitted(true)
-    setSelectedClass(''); setCustomAmount(''); setNote(''); setReceiptFile(null); setErrors({})
   }
 
   if (submitted) return (
@@ -517,7 +544,7 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
             : <><i className="ti ti-upload" style={{fontSize:20, color:'#E8401A', display:'block', marginBottom:4}} /><div style={{fontSize:'var(--fs-body)'}}>Upload receipt</div></>
           }
         </div>
-        <input id="pur-receipt" type="file" accept=".jpg,.jpeg,.png,.pdf" style={{display:'none'}} onChange={async e => { const f=e.target.files[0]; const r=f?await readAsDataUrl(f):null; setReceiptFile(r); setErrors(er=>({...er,receipt:null})) }} />
+        <input id="pur-receipt" type="file" accept=".jpg,.jpeg,.png,.pdf" style={{display:'none'}} onChange={async e => { const f=e.target.files[0]; if(!f) return; const r=await compressImage(f); setReceiptFile(r); setErrors(er=>({...er,receipt:null})) }} />
         {errors.receipt && <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>{errors.receipt}</div>}
       </div>
       <div style={{marginBottom:'var(--sp-md)'}}>

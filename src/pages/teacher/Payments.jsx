@@ -221,12 +221,14 @@ export default function TeacherPayments({
                   <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginBottom:4}}>
                     <i className="ti ti-file-check" style={{marginRight:4, color:'#0F6E56'}}/>Receipt: {payment.receiptFile}
                   </div>
-                  {payment.receiptDataUrl && (payment.receiptDataUrl.startsWith('data:image') ? (
+                  {payment.receiptDataUrl ? (
                     <img src={payment.receiptDataUrl} alt="Receipt"
                       style={{maxWidth:'100%', maxHeight:280, borderRadius:'var(--r-sm)', border:'0.5px solid var(--color-border-secondary)', objectFit:'contain', display:'block', background:'#f9fafb'}} />
                   ) : (
-                    <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', fontStyle:'italic'}}>PDF receipt — cannot preview inline.</div>
-                  ))}
+                    <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', fontStyle:'italic'}}>
+                      {payment.receiptFile?.toLowerCase().endsWith('.pdf') ? 'PDF receipt on file.' : 'Receipt on file (no preview).'}
+                    </div>
+                  )}
                 </div>
               )}
 
