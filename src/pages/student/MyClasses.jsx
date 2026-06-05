@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export default function MyClasses({
-  classes=[], enrolled=[], pendingEnroll=[],
+  classes=[], enrolled=[], pendingEnroll=[], setPendingEnroll,
   sessionPacks=[], logSession,
   leaveRequests=[],
   navigate, user, studentName, submitLeave, requestMakeup,
@@ -228,8 +228,19 @@ export default function MyClasses({
             {pendingCls.map(c => (
               <div key={c.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'3px 0' }}>
                 <span className="dot" style={{ background:c.color }} />
-                <span style={{ fontSize:'var(--fs-sm)', fontFamily:'var(--font)' }}>{c.name}</span>
+                <span style={{ fontSize:'var(--fs-sm)', fontFamily:'var(--font)', flex:1 }}>{c.name}</span>
                 <span className="pill pill-warn" style={{ fontSize:10 }}>Pending</span>
+                <button
+                  className="btn"
+                  style={{ fontSize:10, padding:'2px 8px', color:'#791F1F', borderColor:'rgba(163,45,45,0.3)' }}
+                  onClick={() => {
+                    if (window.confirm(`Cancel pending enrollment for ${c.name}?`)) {
+                      setPendingEnroll(prev => prev.filter(id => id !== c.id))
+                    }
+                  }}
+                >
+                  <i className="ti ti-x" /> Cancel
+                </button>
               </div>
             ))}
             <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:4 }}>

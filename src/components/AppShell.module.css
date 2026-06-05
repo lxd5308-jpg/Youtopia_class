@@ -63,6 +63,8 @@
   text-align: left;
   margin: 2px 0;
   transition: background 0.12s, color 0.12s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .navItem:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
 .navItem i { font-size: 16px; }
@@ -196,6 +198,10 @@
   position: relative;
   transition: color 0.12s;
   letter-spacing: 0.01em;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .bottomNavItem i { font-size: 20px; line-height: 1; }
 .bottomNavItem:active { background: rgba(255,255,255,0.05); }
