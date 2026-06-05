@@ -149,6 +149,7 @@ export default function AppShell(props) {
             <button
               key={item.id}
               className={`${styles.bottomNavItem} ${page===item.id ? styles.bottomNavActive : ''}`}
+              onTouchEnd={(e) => { e.preventDefault(); setPage(item.id) }}
               onClick={() => setPage(item.id)}
             >
               <i className={`ti ${item.icon}`} />
