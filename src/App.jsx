@@ -53,6 +53,16 @@ export default function App() {
   const studentUnsubRef = useRef(null)
   const globalUnsubRef  = useRef(null)
 
+  // ── Pre-load teacherEmails on fresh page load ─────────────────
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'main')).then(snap => {
+      if (snap.exists()) {
+        const emails = snap.data().teacherEmails
+        if (emails?.length) setTd(prev => ({ ...prev, teacherEmails: emails }))
+      }
+    })
+  }, [])
+
   // ── Auto-restore session after mobile reload ──────────────────
   useEffect(() => {
     const savedRole = localStorage.getItem('pendingLoginRole')
@@ -141,7 +151,7 @@ export default function App() {
       globalUnsubRef.current()
       globalUnsubRef.current = null
     }
-    setTd(defaultTeacher())
+    setTd(prev => ({ ...defaultTeacher(), teacherEmails: prev.teacherEmails }))
   }
 
   // ── Auto-archive: move old semester enrollments to history on login ──
