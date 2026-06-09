@@ -10,7 +10,7 @@ const PKG_LABEL = { full:'Full semester', '10pack':'10-session pack', dropin:'Dr
 
 export default function TeacherPayments({
   pendingPayments, setPendingPayments,
-  teacherPayHistory, setTeacherPayHist,
+  setTeacherPayHist,
   enrollStudent,
   enrollments = [],
   teacherSessionPacks = [],
@@ -209,9 +209,17 @@ export default function TeacherPayments({
                     </button>
                   </div>
                 ) : (
-                  <span className={`pill ${payment.status==='confirmed'?'pill-ok':'pill-no'}`}>
-                    {payment.status==='confirmed' ? '✓ Confirmed' : '✗ Rejected'}
-                  </span>
+                  <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0}}>
+                    <span className={`pill ${payment.status==='confirmed'?'pill-ok':'pill-no'}`}>
+                      {payment.status==='confirmed' ? '✓ Confirmed' : '✗ Rejected'}
+                    </span>
+                    {payment.receiptFile && (
+                      <button className="btn" style={{fontSize:10, padding:'2px 7px'}}
+                        onClick={() => setPayExpandedId(isExpanded ? null : payment.id)}>
+                        <i className={`ti ti-${isExpanded ? 'eye-off' : 'receipt'}`}/> {isExpanded ? 'Hide' : 'Receipt'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 

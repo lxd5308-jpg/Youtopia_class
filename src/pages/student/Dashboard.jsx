@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { SEMESTER } from '../../data/mockData'
 
+function localeToISO(str) {
+  const d = new Date(str)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+}
+
 const LEAVE_STATUS = {
   pending:  { pill:'pill-warn', label:'⏳ Pending'  },
   approved: { pill:'pill-ok',   label:'✓ Approved'  },
@@ -15,7 +24,7 @@ const MK_STATUS = {
 
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
-  leaveRequests=[], studentName, setStudentName, user, logSession,
+  leaveRequests=[], studentName, setStudentName, user, logSession, editSessionDate,
   submitLeave, requestMakeup, studentLoading, pendingPayments=[],
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
@@ -34,6 +43,18 @@ export default function StudentDashboard({
   const [selMins, setSelMins]         = useState({})
   const [selTeacher, setSelTeacher]   = useState({})
   const [selDate, setSelDate]         = useState({})
+  const [editingEntry, setEditingEntry] = useState(null)   // {packId, index}
+  const [editEntryDate, setEditEntryDate] = useState('')   // ISO string
+
+  function openEditEntry(packId, index, currentDate) {
+    setEditingEntry({ packId, index })
+    setEditEntryDate(localeToISO(currentDate))
+  }
+  function saveEditEntry() {
+    if (!editingEntry || !editEntryDate) return
+    editSessionDate(editingEntry.packId, editingEntry.index, fmtDate(editEntryDate), user?.email)
+    setEditingEntry(null)
+  }
 
   // Leave request state (keyed by classId)
   const [leaveFormFor,   setLeaveFormFor]   = useState(null)
@@ -56,15 +77,17 @@ export default function StudentDashboard({
   const pendingEnrollClasses = classes.filter(c => pendingEnroll.includes(c.id) && !enrolled.includes(c.id))
   const pendingLeaves        = leaveRequests.filter(r => r.status==='pending')
   const activePacks          = (sessionPacks||[]).filter(p => (p.sessionsUsed||0) < 10)
+  const today                = new Date().toISOString().slice(0, 10)
 
   function handleLogSession(packId) {
-    const mins    = Number(selMins[packId] || 60)
-    const hours   = parseFloat((mins / 60).toFixed(2))
-    const teacher = (selTeacher[packId] || '').trim()
-    const today   = new Date().toISOString().slice(0, 10)
-    const iso     = selDate[packId] || today
-    const [y, m, d] = iso.split('-').map(Number)
-    const date    = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const pack      = activePacks.find(p => p.id === packId)
+    const used      = parseFloat((pack?.sessionsUsed || 0).toFixed(2))
+    const remaining = parseFloat(Math.max(0, 10 - used).toFixed(2))
+    const mins      = Number(selMins[packId] || 60)
+    const requested = parseFloat((mins / 60).toFixed(2))
+    const hours     = parseFloat(Math.min(requested, remaining).toFixed(2))
+    const teacher   = (selTeacher[packId] || '').trim()
+    const date      = fmtDate(selDate[packId] || today)
     setLoggingPack(l => ({ ...l, [packId]: true }))
     logSession(packId, user?.email, user?.name, hours, teacher, date)
     setTimeout(() => {
@@ -472,8 +495,12 @@ export default function StudentDashboard({
             const left = parseFloat((10-used).toFixed(1))
             const pct  = Math.min(Math.round((used/10)*100), 100)
             const color = pct>=90?'#E24B4A':pct>=70?'#F47B20':'#E8401A'
-            const done  = used >= 10
-            const log   = pack.sessionLog || []
+            const done        = used >= 10
+            const log         = pack.sessionLog || []
+            const inputMins   = Number(selMins[pack.id] || 60)
+            const requested   = parseFloat((inputMins / 60).toFixed(2))
+            const wouldExceed = !done && requested > left
+            const overflow    = wouldExceed ? parseFloat((requested - left).toFixed(2)) : 0
             return (
               <div key={pack.id||i} style={{padding:'10px 0',borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
@@ -494,57 +521,93 @@ export default function StudentDashboard({
                 {log.length > 0 && (
                   <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-xs) var(--sp-sm)',marginBottom:8}}>
                     <div style={{fontSize:'var(--fs-xs)',fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>History</div>
-                    {log.map((entry,j) => (
-                      <div key={j} style={{display:'flex',justifyContent:'space-between',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',padding:'2px 0'}}>
-                        <span style={{color:'var(--color-text-primary)'}}>
-                          Session {j+1}{entry.teacher ? <span style={{fontWeight:400,color:'var(--color-text-secondary)'}}> · {entry.teacher}</span> : ''}
-                        </span>
-                        <span>{entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} · {entry.date}</span>
-                      </div>
-                    ))}
+                    {log.map((entry,j) => {
+                      const isEditingThis = editingEntry?.packId === pack.id && editingEntry?.index === j
+                      return (
+                        <div key={j} style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',padding:'3px 0',gap:6}}>
+                          <span style={{color:'var(--color-text-primary)'}}>
+                            Session {j+1}{entry.teacher ? <span style={{fontWeight:400,color:'var(--color-text-secondary)'}}> · {entry.teacher}</span> : ''}
+                          </span>
+                          <span style={{display:'flex',alignItems:'center',gap:4}}>
+                            {entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} ·{' '}
+                            {isEditingThis ? (
+                              <>
+                                <input
+                                  type="date"
+                                  value={editEntryDate}
+                                  max={new Date().toISOString().slice(0,10)}
+                                  onChange={e => setEditEntryDate(e.target.value)}
+                                  style={{fontSize:'var(--fs-xs)',padding:'1px 4px',width:120}}
+                                />
+                                <button onClick={saveEditEntry} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'#27500A',color:'#fff',border:'none',borderRadius:3,cursor:'pointer'}}>Save</button>
+                                <button onClick={() => setEditingEntry(null)} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'none',border:'0.5px solid var(--color-border-tertiary)',borderRadius:3,cursor:'pointer'}}>Cancel</button>
+                              </>
+                            ) : (
+                              <>
+                                {entry.date}
+                                <button onClick={() => openEditEntry(pack.id, j, entry.date)} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Edit date">
+                                  <i className="ti ti-pencil" style={{fontSize:11}} />
+                                </button>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
                 {done ? (
                   <div style={{fontSize:'var(--fs-xs)',color:'#791F1F'}}>All 10 hours used. Purchase a new pack to continue.</div>
                 ) : (
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                    <input
-                      type="number"
-                      min={1}
-                      max={600}
-                      placeholder="60"
-                      value={selMins[pack.id] ?? ''}
-                      onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
-                      style={{width:80,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
-                    />
-                    <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>min</span>
-                    <input
-                      type="text"
-                      placeholder="Teacher (optional)"
-                      value={selTeacher[pack.id] ?? ''}
-                      onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
-                      style={{width:140,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
-                    />
-                    <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>Class date</span>
-                    <input
-                      type="date"
-                      value={selDate[pack.id] || new Date().toISOString().slice(0, 10)}
-                      max={new Date().toISOString().slice(0, 10)}
-                      onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
-                      style={{width:120, fontSize:'var(--fs-xs)',padding:'4px 8px'}}
-                    />
-                    <button
-                      className="btn btn-p"
-                      style={{fontSize:'var(--fs-xs)',padding:'5px 12px'}}
-                      disabled={loggingPack[pack.id]}
-                      onClick={() => handleLogSession(pack.id)}
-                    >
-                      {loggingPack[pack.id]
-                        ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Logging…</>
-                        : <><i className="ti ti-plus" /> Log hours</>
-                      }
-                    </button>
-                  </div>
+                  <>
+                    {wouldExceed && (
+                      <div style={{background:'rgba(245,184,0,0.1)',border:'0.5px solid rgba(245,184,0,0.5)',borderRadius:'var(--r-sm)',padding:'6px 10px',marginBottom:6,fontSize:'var(--fs-xs)',color:'#633806',lineHeight:1.6}}>
+                        <i className="ti ti-alert-triangle" style={{marginRight:4}}/>
+                        Only <strong>{left} hr{left!==1?'s':''}</strong> left in this pack — the button will log {left} hr{left!==1?'s':''} to complete it.
+                        Purchase a new pack to log the remaining <strong>{overflow} hr{overflow!==1?'s':''}</strong>.
+                      </div>
+                    )}
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <input
+                        type="number"
+                        min={1}
+                        max={600}
+                        placeholder="60"
+                        value={selMins[pack.id] ?? ''}
+                        onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
+                        style={{width:80,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                      />
+                      <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>min</span>
+                      <input
+                        type="text"
+                        placeholder="Teacher (optional)"
+                        value={selTeacher[pack.id] ?? ''}
+                        onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
+                        style={{width:140,fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                      />
+                      <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>Class date</span>
+                      <input
+                        type="date"
+                        value={selDate[pack.id] || today}
+                        max={today}
+                        onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
+                        style={{width:120, fontSize:'var(--fs-xs)',padding:'4px 8px'}}
+                      />
+                      <button
+                        className="btn btn-p"
+                        style={{fontSize:'var(--fs-xs)',padding:'5px 12px', ...(wouldExceed ? {background:'#F47B20',borderColor:'#F47B20'} : {})}}
+                        disabled={loggingPack[pack.id]}
+                        onClick={() => handleLogSession(pack.id)}
+                      >
+                        {loggingPack[pack.id]
+                          ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Logging…</>
+                          : wouldExceed
+                            ? <><i className="ti ti-alert-triangle" /> Log {left} hr{left!==1?'s':''} only</>
+                            : <><i className="ti ti-plus" /> Log hours</>
+                        }
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             )

@@ -1,8 +1,49 @@
 import { useState } from 'react'
 
+function localeToISO(str) {
+  const d = new Date(str)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function fmtDateISO(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+}
+
+function MakeupForm({ leaveId, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
+  return (
+    <div style={{ background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)', marginTop:4 }}>
+      <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C' }}>
+        <i className="ti ti-school" style={{ marginRight:4 }}/>
+        {isRedo ? 'Request a new makeup class' : 'Request a makeup class'}
+      </div>
+      <div>
+        <label className="form-label">Class to attend *</label>
+        <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
+          <option value="">— Select class —</option>
+          {classes.map(c => (
+            <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="form-label">
+          Preferred date <span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>(optional)</span>
+        </label>
+        <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} style={{ maxWidth:180 }} />
+      </div>
+      <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
+        <button className="btn" style={{ fontSize:11 }} onClick={() => setMakeupFormFor(null)}>Cancel</button>
+        <button className="btn btn-p" style={{ fontSize:11 }} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
+          <i className="ti ti-send"/> Submit request
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function MyClasses({
   classes=[], enrolled=[], pendingEnroll=[], setPendingEnroll,
-  sessionPacks=[], logSession,
+  sessionPacks=[], logSession, editSessionDate,
   leaveRequests=[],
   navigate, user, studentName, submitLeave, requestMakeup,
   enrollmentHistory=[], semester={},
@@ -28,10 +69,23 @@ export default function MyClasses({
   const [selMins,        setSelMins]        = useState({})
   const [selTeacher,     setSelTeacher]     = useState({})
   const [selDate,        setSelDate]        = useState({})
+  const [editingEntry,   setEditingEntry]   = useState(null)
+  const [editEntryDate,  setEditEntryDate]  = useState('')
+
+  function openEditEntry(packId, index, currentDate) {
+    setEditingEntry({ packId, index })
+    setEditEntryDate(localeToISO(currentDate))
+  }
+  function saveEditEntry() {
+    if (!editingEntry || !editEntryDate) return
+    editSessionDate(editingEntry.packId, editingEntry.index, fmtDateISO(editEntryDate), user?.email)
+    setEditingEntry(null)
+  }
 
   const myClasses  = classes.filter(c => enrolledIds.has(c.id))
   const pendingCls = classes.filter(c => pendingIds.has(c.id) && !enrolledIds.has(c.id))
-  const allPacks   = sessionPacks || []
+  const allPacks   = sessionPacks
+  const today      = new Date().toISOString().slice(0, 10)
 
   // ── Leave helpers ─────────────────────────────────────────────
   function openLeaveForm(classId) {
@@ -83,13 +137,14 @@ export default function MyClasses({
 
   // ── Session pack helpers ──────────────────────────────────────
   function handleLogSession(packId) {
-    const mins    = Number(selMins[packId] || 60)
-    const hours   = parseFloat((mins / 60).toFixed(2))
-    const teacher = (selTeacher[packId] || '').trim()
-    const today   = new Date().toISOString().slice(0, 10)
-    const iso     = selDate[packId] || today
-    const [y, m, d] = iso.split('-').map(Number)
-    const date    = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const pack      = allPacks.find(p => p.id === packId)
+    const used      = parseFloat((pack?.sessionsUsed || 0).toFixed(2))
+    const remaining = parseFloat(Math.max(0, 10 - used).toFixed(2))
+    const mins      = Number(selMins[packId] || 60)
+    const requested = parseFloat((mins / 60).toFixed(2))
+    const hours     = parseFloat(Math.min(requested, remaining).toFixed(2))
+    const teacher   = (selTeacher[packId] || '').trim()
+    const date      = fmtDateISO(selDate[packId] || today)
     setLoggingPack(l => ({ ...l, [packId]: true }))
     logSession(packId, user?.email, user?.name, hours, teacher, date)
     setTimeout(() => {
@@ -98,39 +153,6 @@ export default function MyClasses({
       setSelTeacher(t => ({ ...t, [packId]: '' }))
       setSelDate(dd => ({ ...dd, [packId]: '' }))
     }, 800)
-  }
-
-  // ── Makeup form (reusable block) ──────────────────────────────
-  function MakeupForm({ leaveId, isRedo }) {
-    return (
-      <div style={{ background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)', marginTop:4 }}>
-        <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C' }}>
-          <i className="ti ti-school" style={{ marginRight:4 }}/>
-          {isRedo ? 'Request a new makeup class' : 'Request a makeup class'}
-        </div>
-        <div>
-          <label className="form-label">Class to attend *</label>
-          <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
-            <option value="">— Select class —</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="form-label">
-            Preferred date <span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>(optional)</span>
-          </label>
-          <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} style={{ maxWidth:180 }} />
-        </div>
-        <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
-          <button className="btn" style={{ fontSize:11 }} onClick={() => setMakeupFormFor(null)}>Cancel</button>
-          <button className="btn btn-p" style={{ fontSize:11 }} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
-            <i className="ti ti-send"/> Submit request
-          </button>
-        </div>
-      </div>
-    )
   }
 
   const semesterEnded = semester?.endDate ? new Date() > new Date(semester.endDate) : false
@@ -348,7 +370,12 @@ export default function MyClasses({
                             </div>
                           ) : !lr.makeup ? (
                             makeupFormFor===lr.id ? (
-                              <MakeupForm leaveId={lr.id} isRedo={false} />
+                              <MakeupForm leaveId={lr.id} isRedo={false}
+                                mkClass={mkClass} mkDate={mkDate} classes={classes}
+                                setMkClass={setMkClass} setMkDate={setMkDate}
+                                setMakeupFormFor={setMakeupFormFor}
+                                submitMakeupRequest={submitMakeupRequest}
+                              />
                             ) : (
                               <button className="btn" style={{ fontSize:10, padding:'2px 10px' }} onClick={() => openMakeupForm(lr.id)}>
                                 <i className="ti ti-school" style={{ marginRight:4 }}/>Request makeup class
@@ -368,7 +395,12 @@ export default function MyClasses({
                             </div>
                           ) : (
                             makeupFormFor===lr.id ? (
-                              <MakeupForm leaveId={lr.id} isRedo={true} />
+                              <MakeupForm leaveId={lr.id} isRedo={true}
+                                mkClass={mkClass} mkDate={mkDate} classes={classes}
+                                setMkClass={setMkClass} setMkDate={setMkDate}
+                                setMakeupFormFor={setMakeupFormFor}
+                                submitMakeupRequest={submitMakeupRequest}
+                              />
                             ) : (
                               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                 <span style={{ fontSize:'var(--fs-xs)', color:'#791F1F' }}>
@@ -418,8 +450,12 @@ export default function MyClasses({
         const left  = parseFloat(Math.max(0, 10 - used).toFixed(1))
         const pct   = Math.min(Math.round((used / 10) * 100), 100)
         const color = pct >= 90 ? '#E24B4A' : pct >= 70 ? '#F47B20' : '#E8401A'
-        const done  = used >= 10
-        const log   = pack.sessionLog || []
+        const done        = used >= 10
+        const log         = pack.sessionLog || []
+        const inputMins   = Number(selMins[pack.id] || 60)
+        const requested   = parseFloat((inputMins / 60).toFixed(2))
+        const wouldExceed = !done && requested > left
+        const overflow    = wouldExceed ? parseFloat((requested - left).toFixed(2)) : 0
 
         return (
           <div className="card" key={pack.id || i}>
@@ -448,18 +484,42 @@ export default function MyClasses({
                   Hour log
                 </div>
                 <div style={{ background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)' }}>
-                  {log.map((entry, j) => (
-                    <div key={j} style={{ display:'flex', alignItems:'center', gap:10, padding:'4px 0', borderBottom: j < log.length - 1 ? '0.5px solid var(--color-border-tertiary)' : 'none' }}>
-                      <div style={{ width:20, height:20, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                        <i className="ti ti-clock" style={{ fontSize:10, color:'#fff' }} />
+                  {log.map((entry, j) => {
+                    const isEditingThis = editingEntry?.packId === pack.id && editingEntry?.index === j
+                    return (
+                      <div key={j} style={{ display:'flex', alignItems:'center', gap:10, padding:'4px 0', borderBottom: j < log.length - 1 ? '0.5px solid var(--color-border-tertiary)' : 'none', flexWrap:'wrap' }}>
+                        <div style={{ width:20, height:20, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          <i className="ti ti-clock" style={{ fontSize:10, color:'#fff' }} />
+                        </div>
+                        <span style={{ fontSize:'var(--fs-sm)' }}>{entry.hours || 1} hr{(entry.hours||1) !== 1 ? 's' : ''}</span>
+                        {entry.teacher && (
+                          <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>· {entry.teacher}</span>
+                        )}
+                        <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:4 }}>
+                          {isEditingThis ? (
+                            <>
+                              <input
+                                type="date"
+                                value={editEntryDate}
+                                max={new Date().toISOString().slice(0,10)}
+                                onChange={e => setEditEntryDate(e.target.value)}
+                                style={{ fontSize:'var(--fs-xs)', padding:'1px 4px', width:120 }}
+                              />
+                              <button onClick={saveEditEntry} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'#27500A', color:'#fff', border:'none', borderRadius:3, cursor:'pointer' }}>Save</button>
+                              <button onClick={() => setEditingEntry(null)} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'none', border:'0.5px solid var(--color-border-tertiary)', borderRadius:3, cursor:'pointer' }}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              {entry.date}
+                              <button onClick={() => openEditEntry(pack.id, j, entry.date)} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', color:'var(--color-text-secondary)', lineHeight:1 }} title="Edit date">
+                                <i className="ti ti-pencil" style={{ fontSize:11 }} />
+                              </button>
+                            </>
+                          )}
+                        </span>
                       </div>
-                      <span style={{ fontSize:'var(--fs-sm)' }}>{entry.hours || 1} hr{(entry.hours||1) !== 1 ? 's' : ''}</span>
-                      {entry.teacher && (
-                        <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>· {entry.teacher}</span>
-                      )}
-                      <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', whiteSpace:'nowrap' }}>{entry.date}</span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -470,42 +530,60 @@ export default function MyClasses({
                 All 10 hours used. Purchase a new pack to continue.
               </div>
             ) : (
-              <div style={{ display:'flex', gap:'var(--sp-sm)', alignItems:'center', flexWrap:'wrap' }}>
-                <input
-                  type="number"
-                  min={1}
-                  max={600}
-                  placeholder="60"
-                  value={selMins[pack.id] ?? ''}
-                  onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
-                  style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
-                />
-                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
-                <input
-                  type="text"
-                  placeholder="Teacher (optional)"
-                  value={selTeacher[pack.id] ?? ''}
-                  onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
-                  style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
-                />
-                <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Class date</span>
-                <input
-                  type="date"
-                  value={selDate[pack.id] || new Date().toISOString().slice(0, 10)}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
-                  style={{width:120, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
-                />
-                <button className="btn btn-p" disabled={loggingPack[pack.id]} onClick={() => handleLogSession(pack.id)}>
-                  {loggingPack[pack.id]
-                    ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }} /> Logging…</>
-                    : <><i className="ti ti-clock" /> Log hours</>
-                  }
-                </button>
-                <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', lineHeight:1.5 }}>
-                  Log hours after each class to track toward 10 hrs.
+              <>
+                {wouldExceed && (
+                  <div style={{ background:'rgba(245,184,0,0.1)', border:'0.5px solid rgba(245,184,0,0.5)', borderRadius:'var(--r-sm)', padding:'6px 10px', marginBottom:6, fontSize:'var(--fs-xs)', color:'#633806', lineHeight:1.6 }}>
+                    <i className="ti ti-alert-triangle" style={{ marginRight:4 }}/>
+                    Only <strong>{left} hr{left!==1?'s':''}</strong> left in this pack — the button will log {left} hr{left!==1?'s':''} to complete it.
+                    Purchase a new pack to log the remaining <strong>{overflow} hr{overflow!==1?'s':''}</strong>.
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:'var(--sp-sm)', alignItems:'center', flexWrap:'wrap' }}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={600}
+                    placeholder="60"
+                    value={selMins[pack.id] ?? ''}
+                    onChange={e => setSelMins(m => ({...m, [pack.id]: e.target.value}))}
+                    style={{width:80, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                  />
+                  <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>min</span>
+                  <input
+                    type="text"
+                    placeholder="Teacher (optional)"
+                    value={selTeacher[pack.id] ?? ''}
+                    onChange={e => setSelTeacher(t => ({...t, [pack.id]: e.target.value}))}
+                    style={{width:140, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                  />
+                  <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Class date</span>
+                  <input
+                    type="date"
+                    value={selDate[pack.id] || today}
+                    max={today}
+                    onChange={e => setSelDate(d => ({...d, [pack.id]: e.target.value}))}
+                    style={{width:120, fontSize:'var(--fs-xs)', padding:'4px 8px'}}
+                  />
+                  <button
+                    className="btn btn-p"
+                    style={{ ...(wouldExceed ? { background:'#F47B20', borderColor:'#F47B20' } : {}) }}
+                    disabled={loggingPack[pack.id]}
+                    onClick={() => handleLogSession(pack.id)}
+                  >
+                    {loggingPack[pack.id]
+                      ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }} /> Logging…</>
+                      : wouldExceed
+                        ? <><i className="ti ti-alert-triangle" /> Log {left} hr{left!==1?'s':''} only</>
+                        : <><i className="ti ti-clock" /> Log hours</>
+                    }
+                  </button>
+                  {!wouldExceed && (
+                    <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', lineHeight:1.5 }}>
+                      Log hours after each class to track toward 10 hrs.
+                    </div>
+                  )}
                 </div>
-              </div>
+              </>
             )}
           </div>
         )

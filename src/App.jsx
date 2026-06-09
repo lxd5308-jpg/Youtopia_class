@@ -425,9 +425,8 @@ export default function App() {
     }
     const newSessionPacks = [...(existing.sessionPacks||[]), ...newPacks]
 
-    // Update student Firestore doc (tag with current semester)
+    // Update student Firestore doc (merge: true preserves all other fields)
     await setDoc(studentRef, {
-      ...existing,
       enrolled:             newEnrolled,
       pendingEnroll:        newPending,
       sessionPacks:         newSessionPacks,
@@ -466,6 +465,34 @@ export default function App() {
         studentName:  studentInfo.name,
         studentEmail: studentInfo.email,
       })
+    }
+  }
+
+  // ── editSessionDate ────────────────────────────────────────────
+  async function editSessionDate(packId, entryIndex, newDate, studentEmail) {
+    const patch = logs => logs.map((e, i) => i === entryIndex ? { ...e, date: newDate } : e)
+
+    setSd(d => ({ ...d, sessionPacks: d.sessionPacks.map(p =>
+      p.id === packId ? { ...p, sessionLog: patch(p.sessionLog || []) } : p
+    )}))
+
+    if (studentEmail) {
+      const encoded = encEmail(studentEmail)
+      const snap    = await getDoc(doc(db, 'students', encoded))
+      if (snap.exists()) {
+        const data = snap.data()
+        const updatedPacks = (data.sessionPacks || []).map(p =>
+          p.id === packId ? { ...p, sessionLog: patch(p.sessionLog || []) } : p
+        )
+        await setDoc(doc(db, 'students', encoded), { sessionPacks: updatedPacks }, { merge: true })
+      }
+    }
+
+    const packRef  = doc(db, 'sessionPacks', packId)
+    const packSnap = await getDoc(packRef)
+    if (packSnap.exists()) {
+      const pd = packSnap.data()
+      await setDoc(packRef, { ...pd, sessionLog: patch(pd.sessionLog || []) })
     }
   }
 
@@ -693,6 +720,7 @@ export default function App() {
       addClassToCart={addClassToCart}
       addPackToCart={addPackToCart}
       logSession={logSession}
+      editSessionDate={editSessionDate}
       submitLeave={submitLeave}
       resolveLeave={resolveLeave}
       requestMakeup={requestMakeup}

@@ -58,28 +58,30 @@ export default function Hub({
   setPaymentHistory,
   studentName,
   setPendingEnroll,
+  enrollStudent,
 }) {
   const myPending = (pendingPayments || []).filter(p =>
     p.studentEmail === (user?.email || '') || p.studentName === (user?.name || '')
   )
 
   return (
-    <CartTab user={user} studentName={studentName} cart={cart} setCart={setCart} classes={classes} myPending={myPending} setPendingPayments={setPendingPayments} setPaymentHistory={setPaymentHistory} navigate={navigate} setTab={() => {}} />
+    <CartTab user={user} studentName={studentName} cart={cart} setCart={setCart} classes={classes} myPending={myPending} setPendingPayments={setPendingPayments} setPaymentHistory={setPaymentHistory} navigate={navigate} setTab={() => {}} enrollStudent={enrollStudent} />
   )
 }
 
 // ─────────────────────────────────────────────────────────────
 // CART TAB
 // ─────────────────────────────────────────────────────────────
-function CartTab({ user, studentName, cart, setCart, classes, myPending, setPendingPayments, setPaymentHistory, navigate, setTab }) {
+function CartTab({ user, studentName, cart, setCart, classes, myPending, setPendingPayments, setPaymentHistory, navigate, setTab, enrollStudent }) {
   const [pkgTypes, setPkgTypes]     = useState(() => Object.fromEntries(cart.map(i => [i.classId, i.packageType || 'full'])))
   const [packAmount, setPackAmount] = useState('')   // custom amount for 10-hour pack
   const [payMethod, setPayMethod]   = useState('zelle')
   const [note, setNote]             = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
   const [errors, setErrors]         = useState({})
-  const [submitted, setSubmitted]   = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted]       = useState(false)
+  const [submitting, setSubmitting]     = useState(false)
+  const [submittedAsPack, setSubmittedAsPack] = useState(false)
 
   const has10Pack   = cart.some(i => i.classId === '__10pack__')
   const cartClasses = cart.map(item => ({
@@ -116,7 +118,11 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
     if (!validate()) return
     setSubmitting(true)
     try {
-      const packItems = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
+      const packItems  = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
+      const packOnly   = has10Pack && cartClasses.length === 0
+      const now        = new Date()
+      const submittedAt = now.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
+      const confirmedAt = now.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
       const submission = {
         id:           Date.now(),
         studentName:  studentName || user?.name  || 'Student',
@@ -135,11 +141,16 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
         receiptFile:    receiptFile?.name     || null,
         receiptDataUrl: receiptFile?.dataUrl  || null,
         total,
-        status:      'pending',
-        submittedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+        status:      packOnly ? 'confirmed' : 'pending',
+        submittedAt,
+        ...(packOnly ? { confirmedAt } : {}),
       }
       setPendingPayments(p => [...p, submission])
+      if (packOnly && enrollStudent) {
+        enrollStudent(packItems, { name: studentName || user?.name || 'Student', email: user?.email || '' })
+      }
       setCart([])
+      setSubmittedAsPack(packOnly)
       setSubmitted(true)
     } catch (err) {
       console.error('Payment submission failed:', err)
@@ -149,7 +160,16 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
   }
 
   if (submitted) {
-    return (
+    return submittedAsPack ? (
+      <div className="card" style={{textAlign:'center', padding:'var(--sp-lg)'}}>
+        <div style={{fontSize:48, marginBottom:'var(--sp-md)'}}>✅</div>
+        <div style={{fontSize:16, fontWeight:500, marginBottom:8}}>10-hour pack activated!</div>
+        <div style={{fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)', lineHeight:1.7, maxWidth:360, margin:'0 auto var(--sp-lg)'}}>
+          Your pack is now active and ready to use. Head to your dashboard to start logging hours.
+        </div>
+        <button className="btn btn-p" onClick={() => navigate('sdash')}><i className="ti ti-home" /> Go to dashboard</button>
+      </div>
+    ) : (
       <div className="card" style={{textAlign:'center', padding:'var(--sp-lg)'}}>
         <div style={{fontSize:48, marginBottom:'var(--sp-md)'}}>📬</div>
         <div style={{fontSize:16, fontWeight:500, marginBottom:8}}>Payment submitted!</div>
@@ -433,7 +453,14 @@ function PurchaseTab({ user, studentName, classes, setPendingPayments }) {
     }
   }
 
-  if (submitted) return (
+  if (submitted) return purchaseType === '10pack' ? (
+    <div className="card" style={{textAlign:'center', padding:'var(--sp-lg)'}}>
+      <div style={{fontSize:48, marginBottom:'var(--sp-md)'}}>✅</div>
+      <div style={{fontSize:16, fontWeight:500, marginBottom:8}}>10-hour pack activated!</div>
+      <div style={{fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)', marginBottom:'var(--sp-md)'}}>Your pack is now active and ready to use on your dashboard.</div>
+      <button className="btn btn-p" onClick={() => setSubmitted(false)}><i className="ti ti-plus" /> Submit another</button>
+    </div>
+  ) : (
     <div className="card" style={{textAlign:'center', padding:'var(--sp-lg)'}}>
       <div style={{fontSize:48, marginBottom:'var(--sp-md)'}}>📬</div>
       <div style={{fontSize:16, fontWeight:500, marginBottom:8}}>Submitted!</div>
