@@ -43,16 +43,18 @@ export default function StudentDashboard({
   const [selMins, setSelMins]         = useState({})
   const [selTeacher, setSelTeacher]   = useState({})
   const [selDate, setSelDate]         = useState({})
-  const [editingEntry, setEditingEntry] = useState(null)   // {packId, index}
-  const [editEntryDate, setEditEntryDate] = useState('')   // ISO string
+  const [editingEntry,   setEditingEntry]   = useState(null)  // {packId, index}
+  const [editEntryDate,  setEditEntryDate]  = useState('')    // ISO string
+  const [editEntryTeacher, setEditEntryTeacher] = useState('')
 
-  function openEditEntry(packId, index, currentDate) {
+  function openEditEntry(packId, index, currentDate, currentTeacher) {
     setEditingEntry({ packId, index })
     setEditEntryDate(localeToISO(currentDate))
+    setEditEntryTeacher(currentTeacher || '')
   }
   function saveEditEntry() {
     if (!editingEntry || !editEntryDate) return
-    editSessionDate(editingEntry.packId, editingEntry.index, fmtDate(editEntryDate), user?.email)
+    editSessionDate(editingEntry.packId, editingEntry.index, fmtDate(editEntryDate), user?.email, editEntryTeacher.trim())
     setEditingEntry(null)
   }
 
@@ -537,7 +539,14 @@ export default function StudentDashboard({
                                   value={editEntryDate}
                                   max={new Date().toISOString().slice(0,10)}
                                   onChange={e => setEditEntryDate(e.target.value)}
-                                  style={{fontSize:'var(--fs-xs)',padding:'1px 4px',width:120}}
+                                  style={{fontSize:'var(--fs-xs)',padding:'1px 4px',width:110}}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Teacher"
+                                  value={editEntryTeacher}
+                                  onChange={e => setEditEntryTeacher(e.target.value)}
+                                  style={{fontSize:'var(--fs-xs)',padding:'1px 4px',width:90}}
                                 />
                                 <button onClick={saveEditEntry} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'#27500A',color:'#fff',border:'none',borderRadius:3,cursor:'pointer'}}>Save</button>
                                 <button onClick={() => setEditingEntry(null)} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'none',border:'0.5px solid var(--color-border-tertiary)',borderRadius:3,cursor:'pointer'}}>Cancel</button>
@@ -545,7 +554,7 @@ export default function StudentDashboard({
                             ) : (
                               <>
                                 {entry.date}
-                                <button onClick={() => openEditEntry(pack.id, j, entry.date)} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Edit date">
+                                <button onClick={() => openEditEntry(pack.id, j, entry.date, entry.teacher)} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Edit">
                                   <i className="ti ti-pencil" style={{fontSize:11}} />
                                 </button>
                               </>

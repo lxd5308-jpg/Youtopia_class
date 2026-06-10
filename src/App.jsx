@@ -469,8 +469,14 @@ export default function App() {
   }
 
   // ── editSessionDate ────────────────────────────────────────────
-  async function editSessionDate(packId, entryIndex, newDate, studentEmail) {
-    const patch = logs => logs.map((e, i) => i === entryIndex ? { ...e, date: newDate } : e)
+  async function editSessionDate(packId, entryIndex, newDate, studentEmail, newTeacher) {
+    const patch = logs => logs.map((e, i) => {
+      if (i !== entryIndex) return e
+      const { teacher: _t, ...base } = e
+      const entry = { ...base, date: newDate }
+      if (newTeacher) entry.teacher = newTeacher
+      return entry
+    })
 
     setSd(d => ({ ...d, sessionPacks: d.sessionPacks.map(p =>
       p.id === packId ? { ...p, sessionLog: patch(p.sessionLog || []) } : p
