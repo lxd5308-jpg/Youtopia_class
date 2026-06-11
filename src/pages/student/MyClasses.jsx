@@ -43,7 +43,7 @@ function MakeupForm({ leaveId, isRedo, mkClass, mkDate, classes, setMkClass, set
 
 export default function MyClasses({
   classes=[], enrolled=[], pendingEnroll=[], setPendingEnroll,
-  sessionPacks=[], logSession, editSessionDate,
+  sessionPacks=[], logSession, editSessionDate, deleteSession,
   leaveRequests=[],
   navigate, user, studentName, submitLeave, requestMakeup,
   enrollmentHistory=[], semester={},
@@ -72,15 +72,19 @@ export default function MyClasses({
   const [editingEntry,     setEditingEntry]     = useState(null)
   const [editEntryDate,    setEditEntryDate]    = useState('')
   const [editEntryTeacher, setEditEntryTeacher] = useState('')
+  const [editEntryMins,    setEditEntryMins]    = useState('')
+  const [deletingEntry,    setDeletingEntry]    = useState(null)
 
-  function openEditEntry(packId, index, currentDate, currentTeacher) {
+  function openEditEntry(packId, index, currentDate, currentTeacher, currentHours) {
     setEditingEntry({ packId, index })
     setEditEntryDate(localeToISO(currentDate))
     setEditEntryTeacher(currentTeacher || '')
+    setEditEntryMins(String(Math.round((currentHours ?? 1) * 60)))
   }
   function saveEditEntry() {
     if (!editingEntry || !editEntryDate) return
-    editSessionDate(editingEntry.packId, editingEntry.index, fmtDateISO(editEntryDate), user?.email, editEntryTeacher.trim())
+    const newHours = parseFloat((Number(editEntryMins || 60) / 60).toFixed(2))
+    editSessionDate(editingEntry.packId, editingEntry.index, fmtDateISO(editEntryDate), user?.email, editEntryTeacher.trim(), newHours)
     setEditingEntry(null)
   }
 
@@ -497,9 +501,18 @@ export default function MyClasses({
                         {entry.teacher && (
                           <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>· {entry.teacher}</span>
                         )}
-                        <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:4 }}>
+                        <span style={{ marginLeft:'auto', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:4, flexWrap:'wrap', justifyContent:'flex-end' }}>
                           {isEditingThis ? (
                             <>
+                              <input
+                                type="number"
+                                min={1}
+                                max={600}
+                                value={editEntryMins}
+                                onChange={e => setEditEntryMins(e.target.value)}
+                                style={{ fontSize:'var(--fs-xs)', padding:'1px 4px', width:52 }}
+                              />
+                              <span style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>min</span>
                               <input
                                 type="date"
                                 value={editEntryDate}
@@ -517,11 +530,20 @@ export default function MyClasses({
                               <button onClick={saveEditEntry} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'#27500A', color:'#fff', border:'none', borderRadius:3, cursor:'pointer' }}>Save</button>
                               <button onClick={() => setEditingEntry(null)} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'none', border:'0.5px solid var(--color-border-tertiary)', borderRadius:3, cursor:'pointer' }}>Cancel</button>
                             </>
+                          ) : deletingEntry?.packId === pack.id && deletingEntry?.index === j ? (
+                            <>
+                              <span style={{ fontSize:'var(--fs-xs)', color:'#791F1F' }}>Delete?</span>
+                              <button onClick={() => { deleteSession(pack.id, j, user?.email); setDeletingEntry(null) }} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'#791F1F', color:'#fff', border:'none', borderRadius:3, cursor:'pointer' }}>Yes</button>
+                              <button onClick={() => setDeletingEntry(null)} style={{ fontSize:'var(--fs-xs)', padding:'1px 6px', background:'none', border:'0.5px solid var(--color-border-tertiary)', borderRadius:3, cursor:'pointer' }}>No</button>
+                            </>
                           ) : (
                             <>
                               {entry.date}
-                              <button onClick={() => openEditEntry(pack.id, j, entry.date, entry.teacher)} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', color:'var(--color-text-secondary)', lineHeight:1 }} title="Edit">
+                              <button onClick={() => openEditEntry(pack.id, j, entry.date, entry.teacher, entry.hours)} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', color:'var(--color-text-secondary)', lineHeight:1 }} title="Edit">
                                 <i className="ti ti-pencil" style={{ fontSize:11 }} />
+                              </button>
+                              <button onClick={() => setDeletingEntry({ packId: pack.id, index: j })} style={{ background:'none', border:'none', cursor:'pointer', padding:'0 2px', color:'var(--color-text-secondary)', lineHeight:1 }} title="Delete">
+                                <i className="ti ti-trash" style={{ fontSize:11 }} />
                               </button>
                             </>
                           )}

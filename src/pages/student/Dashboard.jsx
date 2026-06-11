@@ -24,7 +24,7 @@ const MK_STATUS = {
 
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
-  leaveRequests=[], studentName, setStudentName, user, logSession, editSessionDate,
+  leaveRequests=[], studentName, setStudentName, user, logSession, editSessionDate, deleteSession,
   submitLeave, requestMakeup, studentLoading, pendingPayments=[],
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
@@ -46,15 +46,19 @@ export default function StudentDashboard({
   const [editingEntry,   setEditingEntry]   = useState(null)  // {packId, index}
   const [editEntryDate,  setEditEntryDate]  = useState('')    // ISO string
   const [editEntryTeacher, setEditEntryTeacher] = useState('')
+  const [editEntryMins,  setEditEntryMins]  = useState('')
+  const [deletingEntry,  setDeletingEntry]  = useState(null)  // {packId, index}
 
-  function openEditEntry(packId, index, currentDate, currentTeacher) {
+  function openEditEntry(packId, index, currentDate, currentTeacher, currentHours) {
     setEditingEntry({ packId, index })
     setEditEntryDate(localeToISO(currentDate))
     setEditEntryTeacher(currentTeacher || '')
+    setEditEntryMins(String(Math.round((currentHours ?? 1) * 60)))
   }
   function saveEditEntry() {
     if (!editingEntry || !editEntryDate) return
-    editSessionDate(editingEntry.packId, editingEntry.index, fmtDate(editEntryDate), user?.email, editEntryTeacher.trim())
+    const newHours = parseFloat((Number(editEntryMins || 60) / 60).toFixed(2))
+    editSessionDate(editingEntry.packId, editingEntry.index, fmtDate(editEntryDate), user?.email, editEntryTeacher.trim(), newHours)
     setEditingEntry(null)
   }
 
@@ -530,10 +534,18 @@ export default function StudentDashboard({
                           <span style={{color:'var(--color-text-primary)'}}>
                             Session {j+1}{entry.teacher ? <span style={{fontWeight:400,color:'var(--color-text-secondary)'}}> · {entry.teacher}</span> : ''}
                           </span>
-                          <span style={{display:'flex',alignItems:'center',gap:4}}>
-                            {entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} ·{' '}
+                          <span style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
                             {isEditingThis ? (
                               <>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={600}
+                                  value={editEntryMins}
+                                  onChange={e => setEditEntryMins(e.target.value)}
+                                  style={{fontSize:'var(--fs-xs)',padding:'1px 4px',width:52}}
+                                />
+                                <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>min</span>
                                 <input
                                   type="date"
                                   value={editEntryDate}
@@ -551,11 +563,20 @@ export default function StudentDashboard({
                                 <button onClick={saveEditEntry} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'#27500A',color:'#fff',border:'none',borderRadius:3,cursor:'pointer'}}>Save</button>
                                 <button onClick={() => setEditingEntry(null)} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'none',border:'0.5px solid var(--color-border-tertiary)',borderRadius:3,cursor:'pointer'}}>Cancel</button>
                               </>
+                            ) : deletingEntry?.packId === pack.id && deletingEntry?.index === j ? (
+                              <>
+                                <span style={{fontSize:'var(--fs-xs)',color:'#791F1F'}}>Delete?</span>
+                                <button onClick={() => { deleteSession(pack.id, j, user?.email); setDeletingEntry(null) }} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'#791F1F',color:'#fff',border:'none',borderRadius:3,cursor:'pointer'}}>Yes</button>
+                                <button onClick={() => setDeletingEntry(null)} style={{fontSize:'var(--fs-xs)',padding:'1px 6px',background:'none',border:'0.5px solid var(--color-border-tertiary)',borderRadius:3,cursor:'pointer'}}>No</button>
+                              </>
                             ) : (
                               <>
-                                {entry.date}
-                                <button onClick={() => openEditEntry(pack.id, j, entry.date, entry.teacher)} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Edit">
+                                {entry.hours != null ? `${entry.hours} hr${entry.hours!==1?'s':''}` : '1 hr'} · {entry.date}
+                                <button onClick={() => openEditEntry(pack.id, j, entry.date, entry.teacher, entry.hours)} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Edit">
                                   <i className="ti ti-pencil" style={{fontSize:11}} />
+                                </button>
+                                <button onClick={() => setDeletingEntry({ packId: pack.id, index: j })} style={{background:'none',border:'none',cursor:'pointer',padding:'0 2px',color:'var(--color-text-secondary)',lineHeight:1}} title="Delete">
+                                  <i className="ti ti-trash" style={{fontSize:11}} />
                                 </button>
                               </>
                             )}

@@ -53,16 +53,6 @@ export default function App() {
   const studentUnsubRef = useRef(null)
   const globalUnsubRef  = useRef(null)
 
-  // ── Pre-load teacherEmails on fresh page load ─────────────────
-  useEffect(() => {
-    getDoc(doc(db, 'settings', 'main')).then(snap => {
-      if (snap.exists()) {
-        const emails = snap.data().teacherEmails
-        if (emails?.length) setTd(prev => ({ ...prev, teacherEmails: emails }))
-      }
-    })
-  }, [])
-
   // ── Auto-restore session after mobile reload ──────────────────
   useEffect(() => {
     const savedRole = localStorage.getItem('pendingLoginRole')
@@ -469,17 +459,26 @@ export default function App() {
   }
 
   // ── editSessionDate ────────────────────────────────────────────
-  async function editSessionDate(packId, entryIndex, newDate, studentEmail, newTeacher) {
+  async function editSessionDate(packId, entryIndex, newDate, studentEmail, newTeacher, newHours) {
     const patch = logs => logs.map((e, i) => {
       if (i !== entryIndex) return e
       const { teacher: _t, ...base } = e
       const entry = { ...base, date: newDate }
+      if (newHours != null) entry.hours = newHours
       if (newTeacher) entry.teacher = newTeacher
       return entry
     })
 
+    const patchPack = p => {
+      const newLog = patch(p.sessionLog || [])
+      if (newHours == null) return { ...p, sessionLog: newLog }
+      const oldHours = (p.sessionLog || [])[entryIndex]?.hours ?? 1
+      const newSessionsUsed = parseFloat(Math.min(10, Math.max(0, (p.sessionsUsed || 0) - oldHours + newHours)).toFixed(1))
+      return { ...p, sessionLog: newLog, sessionsUsed: newSessionsUsed }
+    }
+
     setSd(d => ({ ...d, sessionPacks: d.sessionPacks.map(p =>
-      p.id === packId ? { ...p, sessionLog: patch(p.sessionLog || []) } : p
+      p.id === packId ? patchPack(p) : p
     )}))
 
     if (studentEmail) {
@@ -488,7 +487,7 @@ export default function App() {
       if (snap.exists()) {
         const data = snap.data()
         const updatedPacks = (data.sessionPacks || []).map(p =>
-          p.id === packId ? { ...p, sessionLog: patch(p.sessionLog || []) } : p
+          p.id === packId ? patchPack(p) : p
         )
         await setDoc(doc(db, 'students', encoded), { sessionPacks: updatedPacks }, { merge: true })
       }
@@ -498,7 +497,40 @@ export default function App() {
     const packSnap = await getDoc(packRef)
     if (packSnap.exists()) {
       const pd = packSnap.data()
-      await setDoc(packRef, { ...pd, sessionLog: patch(pd.sessionLog || []) })
+      await setDoc(packRef, patchPack(pd))
+    }
+  }
+
+  // ── deleteSession ───────────────────────────────────────────────
+  async function deleteSession(packId, entryIndex, studentEmail) {
+    const patchPack = p => {
+      const oldHours = (p.sessionLog || [])[entryIndex]?.hours ?? 1
+      const newLog = (p.sessionLog || []).filter((_, i) => i !== entryIndex)
+      const newSessionsUsed = parseFloat(Math.max(0, (p.sessionsUsed || 0) - oldHours).toFixed(1))
+      return { ...p, sessionLog: newLog, sessionsUsed: newSessionsUsed }
+    }
+
+    setSd(d => ({ ...d, sessionPacks: d.sessionPacks.map(p =>
+      p.id === packId ? patchPack(p) : p
+    )}))
+
+    if (studentEmail) {
+      const encoded = encEmail(studentEmail)
+      const snap    = await getDoc(doc(db, 'students', encoded))
+      if (snap.exists()) {
+        const data = snap.data()
+        const updatedPacks = (data.sessionPacks || []).map(p =>
+          p.id === packId ? patchPack(p) : p
+        )
+        await setDoc(doc(db, 'students', encoded), { sessionPacks: updatedPacks }, { merge: true })
+      }
+    }
+
+    const packRef  = doc(db, 'sessionPacks', packId)
+    const packSnap = await getDoc(packRef)
+    if (packSnap.exists()) {
+      const pd = packSnap.data()
+      await setDoc(packRef, patchPack(pd))
     }
   }
 
@@ -727,6 +759,7 @@ export default function App() {
       addPackToCart={addPackToCart}
       logSession={logSession}
       editSessionDate={editSessionDate}
+      deleteSession={deleteSession}
       submitLeave={submitLeave}
       resolveLeave={resolveLeave}
       requestMakeup={requestMakeup}

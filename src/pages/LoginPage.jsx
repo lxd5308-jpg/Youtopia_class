@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { auth } from '../config/firebase'
+import { auth, db } from '../config/firebase'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
 
 function isMobile() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
@@ -97,14 +98,29 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
       const result   = await signInWithPopup(auth, provider)
       const fbUser   = result.user
 
-      if (role === 'teacher' && !checkTeacherAccess(fbUser.email)) {
-        await auth.signOut()
-        setError(
-          'This account is not registered as a teacher. ' +
-          'Please sign in as a Student, or contact the academy admin to request teacher access.'
-        )
-        setLoading(false)
-        return
+      if (role === 'teacher') {
+        // Re-fetch teacher emails now that the user is authenticated so the
+        // check uses the current Firestore list, not the stale in-memory one.
+        let currentEmails = teacherEmails
+        try {
+          const snap = await getDoc(doc(db, 'settings', 'main'))
+          if (snap.exists() && snap.data().teacherEmails?.length) {
+            currentEmails = snap.data().teacherEmails
+          }
+        } catch {}
+
+        const allowed = isApprovedTeacher(fbUser.email) ||
+          currentEmails.map(e => e.toLowerCase()).includes((fbUser.email||'').toLowerCase())
+
+        if (!allowed) {
+          await auth.signOut()
+          setError(
+            'This account is not registered as a teacher. ' +
+            'Please sign in as a Student, or contact the academy admin to request teacher access.'
+          )
+          setLoading(false)
+          return
+        }
       }
 
       const initials = fbUser.displayName
