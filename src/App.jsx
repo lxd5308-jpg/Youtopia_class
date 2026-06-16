@@ -658,7 +658,7 @@ export default function App() {
 
   // ── sendWeeklySummary (manual trigger from Configuration page) ──
   async function sendWeeklySummary() {
-    const { emailConfig, teacherEmails: emails, leaveRequests, enrollments: allEnrollments, paymentHistory, pendingPayments, sessionPacks } = td
+    const { emailConfig, teacherEmails: emails, leaveRequests, enrollments: allEnrollments, pendingPayments, sessionPacks } = td
 
     if (!isEmailConfigured(emailConfig)) throw new Error('EMAIL_NOT_CONFIGURED')
     if (!emails || emails.length === 0) throw new Error('No teacher emails configured')
@@ -681,8 +681,8 @@ export default function App() {
     const recentLeaves    = leaveRequests.filter(r => isWithinWeek(r.autoApprovedAt || r.submittedAt))
     const recentMakeups   = leaveRequests.filter(r => r.makeup && isWithinWeek(r.makeup.requestedAt))
     const recentEnrolls   = allEnrollments.filter(e => isWithinWeek(e.enrolledAt))
-    const confirmedPacks  = (paymentHistory||[]).filter(p =>
-      isWithinWeek(p.date) && (p.items||[]).some(i => i.pkgType === '10pack')
+    const confirmedPacks  = (pendingPayments||[]).filter(p =>
+      p.status === 'confirmed' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack')
     )
     const pendingPacks    = (pendingPayments||[]).filter(p =>
       p.status === 'pending' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack')
@@ -735,8 +735,8 @@ export default function App() {
       lines.push('No package purchases this week.')
     } else {
       confirmedPacks.forEach(p => {
-        lines.push(`• ${p.student || 'Unknown'} — 10-session pack`)
-        lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Confirmed  |  ${p.date || ''}`)
+        lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack`)
+        lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Confirmed  |  ${p.submittedAt || ''}`)
       })
       pendingPacks.forEach(p => {
         lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack`)

@@ -110,10 +110,9 @@ async function buildAndSendSummary(db) {
   }
 
   // Fetch all collections in parallel
-  const [leavesSnap, enrollSnap, payHistSnap, paymentsSnap, packsSnap] = await Promise.all([
+  const [leavesSnap, enrollSnap, paymentsSnap, packsSnap] = await Promise.all([
     db.collection('leaveRequests').get(),
     db.collection('enrollments').get(),
-    db.collection('paymentHistory').get(),
     db.collection('payments').get(),
     db.collection('sessionPacks').get(),
   ])
@@ -126,13 +125,13 @@ async function buildAndSendSummary(db) {
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(e => isWithinWeek(e.enrolledAt))
 
-  const confirmedPacks = payHistSnap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(p => isWithinWeek(p.date) && (p.items||[]).some(i => i.pkgType === '10pack'))
-
-  const pendingPacks = paymentsSnap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(p => p.status === 'pending' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack'))
+  const allPayments    = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const confirmedPacks = allPayments.filter(p =>
+    p.status === 'confirmed' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack')
+  )
+  const pendingPacks   = allPayments.filter(p =>
+    p.status === 'pending' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack')
+  )
 
   const completedPacks = packsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -183,8 +182,8 @@ async function buildAndSendSummary(db) {
     lines.push('No package purchases this week.')
   } else {
     confirmedPacks.forEach(p => {
-      lines.push(`• ${p.student || 'Unknown'} — 10-session pack`)
-      lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Confirmed  |  ${p.date || ''}`)
+      lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack`)
+      lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Confirmed  |  ${p.submittedAt || ''}`)
     })
     pendingPacks.forEach(p => {
       lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack`)
