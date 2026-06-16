@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { isApprovedTeacher } from '../../config'
 import * as XLSX from 'xlsx'
+import { isEmailConfigured } from '../../utils/emailService'
 
 // ── Colour palette for auto-assigning class colours ──────────
 const COLORS = ['#E8401A','#F47B20','#F5B800','#C94A8B','#185FA5','#0F6E56','#6B38FB','#E8401A','#F47B20','#F5B800']
@@ -76,7 +77,21 @@ const fmtDate = (s) => {
   catch { return s }
 }
 
-export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester }) {
+const FREQ_OPTIONS = [
+  { value:'daily',    label:'Daily' },
+  { value:'weekly',   label:'Weekly' },
+  { value:'biweekly', label:'Every 2 weeks' },
+  { value:'monthly',  label:'Monthly' },
+]
+const DAY_OPTIONS = [
+  { value:0, label:'Sunday' }, { value:1, label:'Monday' }, { value:2, label:'Tuesday' },
+  { value:3, label:'Wednesday' }, { value:4, label:'Thursday' }, { value:5, label:'Friday' },
+  { value:6, label:'Saturday' },
+]
+
+const DEFAULT_SCHED = { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 }
+
+export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester, emailConfig={}, summarySchedule={}, setSummarySchedule, summaryLastSent='', sendWeeklySummary }) {
   // ── Semester state ──────────────────────────────────────────
   const [semDraft,    setSemDraft]    = useState(null)   // null=view, object=editing
   const [semFlash,    setSemFlash]    = useState(false)
@@ -116,6 +131,14 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
     setNewClass(BLANK_CLASS())
     setAddingNew(false)
   }
+
+  // ── Weekly summary state ────────────────────────────────────────
+  const [schedDraft,  setSchedDraft]  = useState(null)   // null=view, object=editing
+  const [schedFlash,  setSchedFlash]  = useState(false)
+  const [summSending, setSummSending] = useState(false)
+  const [summResult,  setSummResult]  = useState(null)   // { sent, failed[] } | 'error'
+
+  const sched = { ...DEFAULT_SCHED, ...summarySchedule }
 
   const [dragging, setDragging]       = useState(false)
   const [gsUrl, setGsUrl]             = useState('')
@@ -525,6 +548,128 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
         )}
         <div style={{marginTop:'var(--sp-md)',background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',lineHeight:1.6}}>
           <i className="ti ti-info-circle" /> Emails added here take effect immediately — no code changes needed.
+        </div>
+      </div>
+
+      {/* ── Summary email schedule ──────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr">
+          <span className="card-title">Summary email</span>
+          {!schedDraft && (
+            <button className="btn" style={{fontSize:'var(--fs-xs)'}} onClick={() => setSchedDraft({...sched})}>
+              <i className="ti ti-pencil" /> Edit schedule
+            </button>
+          )}
+        </div>
+        <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
+          Automatically emails all teacher addresses a summary of <strong>leave requests</strong>, <strong>make-up requests</strong>, and <strong>new registrations</strong> from the past 7 days.
+        </div>
+
+        {/* ── Schedule editor ── */}
+        {schedDraft ? (
+          <div>
+            <div style={{display:'flex',gap:'var(--sp-sm)',flexWrap:'wrap',marginBottom:'var(--sp-md)'}}>
+              <div>
+                <label className="form-label">Frequency</label>
+                <select value={schedDraft.frequency} onChange={e=>setSchedDraft(d=>({...d,frequency:e.target.value}))}>
+                  {FREQ_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              {schedDraft.frequency === 'weekly' || schedDraft.frequency === 'biweekly' ? (
+                <div>
+                  <label className="form-label">Day</label>
+                  <select value={schedDraft.dayOfWeek} onChange={e=>setSchedDraft(d=>({...d,dayOfWeek:Number(e.target.value)}))}>
+                    {DAY_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              ) : schedDraft.frequency === 'monthly' ? (
+                <div>
+                  <label className="form-label">Day of month</label>
+                  <select value={schedDraft.dayOfMonth} onChange={e=>setSchedDraft(d=>({...d,dayOfMonth:Number(e.target.value)}))}>
+                    {Array.from({length:28},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              ) : null}
+
+            </div>
+            <div style={{display:'flex',gap:'var(--sp-sm)'}}>
+              <button className="btn" onClick={() => setSchedDraft(null)}>Cancel</button>
+              <button className="btn btn-p" onClick={() => {
+                if (setSummarySchedule) setSummarySchedule(schedDraft)
+                setSchedDraft(null)
+                setSchedFlash(true)
+                setTimeout(() => setSchedFlash(false), 2500)
+              }}>
+                <i className="ti ti-check" /> Save schedule
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:'var(--sp-md)'}}>
+            <span style={{fontSize:'var(--fs-sm)'}}>
+              <i className="ti ti-clock" style={{marginRight:5,color:'var(--color-text-secondary)'}}/>
+              {FREQ_OPTIONS.find(f=>f.value===sched.frequency)?.label || 'Weekly'}
+              {sched.frequency === 'weekly' || sched.frequency === 'biweekly'
+                ? ` · ${DAY_OPTIONS.find(d=>d.value===sched.dayOfWeek)?.label || 'Monday'}`
+                : sched.frequency === 'monthly'
+                  ? ` · Day ${sched.dayOfMonth}`
+                  : ''
+              }
+              {' · 9:00 AM Pacific'}
+            </span>
+            {schedFlash && <span style={{fontSize:'var(--fs-xs)',color:'#27500A'}}><i className="ti ti-check" /> Saved</span>}
+            {summaryLastSent && (
+              <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
+                Last sent: {summaryLastSent}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Send now ── */}
+        <div style={{display:'flex',alignItems:'center',gap:'var(--sp-sm)',flexWrap:'wrap',borderTop:'0.5px solid var(--color-border-tertiary)',paddingTop:'var(--sp-md)'}}>
+          <button
+            className="btn btn-p"
+            disabled={summSending || !isEmailConfigured(emailConfig)}
+            onClick={async () => {
+              setSummSending(true); setSummResult(null)
+              try {
+                const result = await sendWeeklySummary()
+                setSummResult(result || { sent: teacherEmails.length, failed: [] })
+              } catch {
+                setSummResult('error')
+              } finally {
+                setSummSending(false)
+                setTimeout(() => setSummResult(null), 6000)
+              }
+            }}
+          >
+            {summSending
+              ? <><i className="ti ti-loader-2" style={{animation:'spin 1s linear infinite'}} /> Sending…</>
+              : <><i className="ti ti-send" /> Send summary now</>
+            }
+          </button>
+          {summResult && summResult !== 'error' && summResult.sent > 0 && (
+            <span style={{fontSize:'var(--fs-xs)',color:'#27500A'}}>
+              <i className="ti ti-check" /> Sent to {summResult.sent} teacher{summResult.sent!==1?'s':''}
+            </span>
+          )}
+          {summResult && summResult !== 'error' && summResult.failed.length > 0 && (
+            <div style={{fontSize:'var(--fs-xs)',color:'#E8401A',marginTop:'var(--sp-sm)'}}>
+              <i className="ti ti-alert-circle" /> {summResult.failed.length} failed —{' '}
+              {summResult.failed[0]?.error}
+            </div>
+          )}
+          {summResult === 'error' && (
+            <span style={{fontSize:'var(--fs-xs)',color:'#E8401A'}}>
+              <i className="ti ti-alert-circle" /> Failed — check EmailJS settings
+            </span>
+          )}
+          {!isEmailConfigured(emailConfig) && !summResult && (
+            <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
+              <i className="ti ti-info-circle" /> EmailJS not configured
+            </span>
+          )}
         </div>
       </div>
 

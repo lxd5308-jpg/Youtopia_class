@@ -8,6 +8,7 @@ import { signOut, onAuthStateChanged } from 'firebase/auth'
 import LoginPage from './pages/LoginPage'
 import AppShell from './components/AppShell'
 import { CLASSES, SEMESTER } from './data/mockData'
+import { sendEmailToMany, isEmailConfigured } from './utils/emailService'
 
 const applyFn  = (v, prev) => typeof v === 'function' ? v(prev) : v
 const nowStr   = () => new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -40,8 +41,10 @@ const defaultTeacher = () => ({
   paymentHistory: [],
   sentMessages:   [],
   studentInbox:   [],
-  emailConfig:    { serviceId:'', templateId:'', publicKey:'' },
-  semester:       { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
+  emailConfig:      { serviceId:'', templateId:'', publicKey:'' },
+  semester:         { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
+  summarySchedule:  { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 },
+  summaryLastSent:  '',
 })
 
 export default function App() {
@@ -79,10 +82,12 @@ export default function App() {
         const data = snap.data()
         setTd(prev => ({
           ...prev,
-          classes:       data.classes       || prev.classes,
-          teacherEmails: data.teacherEmails || prev.teacherEmails,
-          emailConfig:   data.emailConfig   || prev.emailConfig,
-          semester:      data.semester      || prev.semester,
+          classes:          data.classes          || prev.classes,
+          teacherEmails:    data.teacherEmails    || prev.teacherEmails,
+          emailConfig:      data.emailConfig      || prev.emailConfig,
+          semester:         data.semester         || prev.semester,
+          summarySchedule:  data.summarySchedule  ?? prev.summarySchedule,
+          summaryLastSent:  data.summaryLastSent  ?? prev.summaryLastSent,
         }))
       } else {
         setDoc(doc(db, 'settings', 'main'), {
@@ -246,11 +251,11 @@ export default function App() {
     })
   }
 
-  const setEmailConfig = (v) => {
+  const setSummarySchedule = (v) => {
     setTd(prev => {
-      const emailConfig = applyFn(v, prev.emailConfig)
-      setDoc(doc(db, 'settings', 'main'), { emailConfig }, { merge: true })
-      return { ...prev, emailConfig }
+      const summarySchedule = applyFn(v, prev.summarySchedule)
+      setDoc(doc(db, 'settings', 'main'), { summarySchedule }, { merge: true })
+      return { ...prev, summarySchedule }
     })
   }
 
@@ -651,6 +656,117 @@ export default function App() {
     }
   }
 
+  // ── sendWeeklySummary (manual trigger from Configuration page) ──
+  async function sendWeeklySummary() {
+    const { emailConfig, teacherEmails: emails, leaveRequests, enrollments: allEnrollments, paymentHistory, pendingPayments, sessionPacks } = td
+
+    if (!isEmailConfigured(emailConfig)) throw new Error('EMAIL_NOT_CONFIGURED')
+    if (!emails || emails.length === 0) throw new Error('No teacher emails configured')
+
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    function parseAppDate(str) {
+      if (!str) return null
+      const clean = str.replace(/,\s*\d{1,2}:\d{2}\s*(AM|PM)/i, '')
+      const d = new Date(clean)
+      return isNaN(d.getTime()) ? null : d
+    }
+    function isWithinWeek(str) {
+      const d = parseAppDate(str)
+      return d !== null && d >= weekAgo
+    }
+
+    const PKG_LABELS = { full:'Full semester', '10pack':'10-session pack', dropin:'Drop-in' }
+
+    const recentLeaves    = leaveRequests.filter(r => isWithinWeek(r.autoApprovedAt || r.submittedAt))
+    const recentMakeups   = leaveRequests.filter(r => r.makeup && isWithinWeek(r.makeup.requestedAt))
+    const recentEnrolls   = allEnrollments.filter(e => isWithinWeek(e.enrolledAt))
+    const confirmedPacks  = (paymentHistory||[]).filter(p =>
+      isWithinWeek(p.date) && (p.items||[]).some(i => i.pkgType === '10pack')
+    )
+    const pendingPacks    = (pendingPayments||[]).filter(p =>
+      p.status === 'pending' && isWithinWeek(p.submittedAt) && (p.items||[]).some(i => i.pkgType === '10pack')
+    )
+    const completedPacks  = (sessionPacks||[]).filter(p =>
+      (p.sessionsUsed || 0) >= 10 &&
+      isWithinWeek((p.sessionLog || []).slice(-1)[0]?.date)
+    )
+
+    const weekOf = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+
+    const lines = [
+      `Weekly Summary — Week of ${weekOf}`,
+      '',
+      `LEAVE REQUESTS (${recentLeaves.length})`,
+      '--------------------------------',
+    ]
+    if (recentLeaves.length === 0) {
+      lines.push('No leave requests this week.')
+    } else {
+      recentLeaves.forEach(r => {
+        lines.push(`• ${r.studentName || 'Unknown'} — ${r.className || ''}`)
+        lines.push(`  Submitted: ${r.autoApprovedAt || r.submittedAt || ''}  |  Status: ${r.status}`)
+      })
+    }
+
+    lines.push('', `MAKE-UP REQUESTS (${recentMakeups.length})`, '--------------------------------')
+    if (recentMakeups.length === 0) {
+      lines.push('No make-up requests this week.')
+    } else {
+      recentMakeups.forEach(r => {
+        lines.push(`• ${r.studentName || 'Unknown'} — wants makeup in: ${r.makeup.className || ''}`)
+        lines.push(`  Requested: ${r.makeup.requestedAt || ''}  |  Status: ${r.makeup.status}`)
+      })
+    }
+
+    lines.push('', `NEW REGISTRATIONS (${recentEnrolls.length})`, '--------------------------------')
+    if (recentEnrolls.length === 0) {
+      lines.push('No new registrations this week.')
+    } else {
+      recentEnrolls.forEach(e => {
+        lines.push(`• ${e.studentName || 'Unknown'} — ${e.className || ''}`)
+        lines.push(`  Type: ${PKG_LABELS[e.pkgType] || e.pkgType || ''}  |  Enrolled: ${e.enrolledAt || ''}`)
+      })
+    }
+
+    const totalPacks = confirmedPacks.length + pendingPacks.length
+    lines.push('', `PACKAGE PURCHASES (${totalPacks})`, '--------------------------------')
+    if (totalPacks === 0) {
+      lines.push('No package purchases this week.')
+    } else {
+      confirmedPacks.forEach(p => {
+        lines.push(`• ${p.student || 'Unknown'} — 10-session pack`)
+        lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Confirmed  |  ${p.date || ''}`)
+      })
+      pendingPacks.forEach(p => {
+        lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack`)
+        lines.push(`  Total: $${p.total || ''}  |  Method: ${p.method || ''}  |  Status: Pending  |  ${p.submittedAt || ''}`)
+      })
+    }
+
+    lines.push('', `COMPLETED PACKAGES (${completedPacks.length})`, '--------------------------------')
+    if (completedPacks.length === 0) {
+      lines.push('No completed packages this week.')
+    } else {
+      completedPacks.forEach(p => {
+        const lastSession = (p.sessionLog || []).slice(-1)[0]?.date || ''
+        lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack fully used`)
+        lines.push(`  Hours used: ${p.sessionsUsed}/10  |  Last session: ${lastSession}`)
+      })
+    }
+
+    const result = await sendEmailToMany(emailConfig, emails.map(email => ({ email, name: 'Teacher' })), {
+      fromName: 'Youtopia Dance Academy',
+      subject:  `[Youtopia] Weekly Summary — ${weekOf}`,
+      message:  lines.join('\n'),
+    })
+    const p = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+    const todayISO = `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-${String(p.getDate()).padStart(2,'0')}`
+    await setDoc(doc(db, 'settings', 'main'), { summaryLastSent: todayISO }, { merge: true })
+    setTd(prev => ({ ...prev, summaryLastSent: todayISO }))
+    return result
+  }
+
   // ── sendTeacherMessage ─────────────────────────────────────────
   async function sendTeacherMessage(msgObj) {
     const record = { ...msgObj, id: Date.now(), sentAt: nowStr() }
@@ -769,7 +885,10 @@ export default function App() {
       sendStudentMessage={sendStudentMessage}
       markMessageRead={markMessageRead}
       emailConfig={td.emailConfig||{}}
-      setEmailConfig={setEmailConfig}
+      summarySchedule={td.summarySchedule||{}}
+      setSummarySchedule={setSummarySchedule}
+      summaryLastSent={td.summaryLastSent||''}
+      sendWeeklySummary={sendWeeklySummary}
     />
   )
 }

@@ -1,0 +1,139 @@
+# Test Cases
+
+Run `npm run build` first. All cases below are manual UI tests.
+Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
+
+---
+
+## TC-01 · 10-hour pack: log hours cap
+
+**Requirement:** If logging the selected minutes would exceed the remaining hours in a pack, show a warning and cap the logged amount to the remaining hours. Do not allow logging beyond 10 hrs total.
+
+**Steps:**
+1. Log in as a student with an active 10-hour pack that has < 10 hrs remaining (e.g. 9.5 hrs used).
+2. On Dashboard → active pack, set the minutes input to 60 (1 hr).
+3. Observe the Log button and the area above it.
+
+**Expected:**
+- A yellow warning banner appears stating only X hrs remain.
+- The Log button turns orange and reads "Log X hrs only" (not "Log 1 hr").
+- Clicking the button logs only the remaining hours, not the full requested amount.
+- After logging, the pack shows 10/10 hrs used and the pack disappears from active packs.
+
+---
+
+## TC-02 · 10-hour pack: edit session date
+
+**Requirement:** After logging a session, the student can correct the date if the wrong date was entered.
+
+**Steps:**
+1. Log in as a student with at least one logged session in an active pack.
+2. On Dashboard → pack history, locate a logged entry.
+3. Click the pencil icon on the right of the entry.
+4. Change the date using the date picker and click Save.
+
+**Expected:**
+- The entry updates immediately to show the new date.
+- Cancelling returns the entry to its original date without changes.
+- The date picker does not allow future dates.
+- The change persists after a page reload.
+
+---
+
+## TC-03 · 10-hour pack: edit session teacher
+
+**Requirement:** After logging a session, the student can add or correct the teacher name (e.g. if it was accidentally left blank).
+
+**Steps:**
+1. Log in as a student with at least one logged session.
+2. Click the pencil icon on a session entry.
+3. Edit the Teacher input field (add a name, change it, or clear it) and click Save.
+
+**Expected:**
+- The entry updates to show the new teacher name inline (e.g. "Session 1 · Ms. Smith").
+- Clearing the teacher field removes the teacher name from the entry entirely.
+- The change persists after a page reload.
+
+---
+
+## TC-04 · 10-hour pack: auto-approval on purchase
+
+**Requirement:** When a student submits a payment for a 10-hour pack only (no regular classes in the cart), the pack is activated immediately without teacher review.
+
+**Steps:**
+1. Log in as a student.
+2. Add a 10-hour pack to the cart (no other classes).
+3. Go to Payments → Cart, fill in amount, payment method, note, and upload a receipt.
+4. Click Submit.
+
+**Expected:**
+- Success screen shows "10-hour pack activated!" (not "Payment submitted!").
+- The payment appears in the teacher's Payments → Confirmed tab (not Pending).
+- The pack appears immediately on the student's Dashboard as an active pack.
+- The cart badge in the nav bar drops to 0.
+
+---
+
+## TC-05 · Cart badge clears after pack submission
+
+**Requirement:** After submitting a 10-hour pack payment, the cart count badge in the nav bar must show 0 (not 1).
+
+**Steps:**
+1. Add a 10-hour pack to the cart.
+2. Submit the payment (see TC-04).
+
+**Expected:**
+- Immediately after the success screen appears, the Payments nav badge shows no number.
+- Navigating away and back does not restore the badge.
+
+---
+
+## TC-07 · Weekly summary email — manual send
+
+**Requirement:** Teacher can send a weekly summary email manually from the Configuration page. The email covers leave requests, make-up requests, and new registrations from the past 7 days.
+
+**Steps:**
+1. Log in as a teacher.
+2. Go to Configuration → Email settings. Confirm EmailJS credentials are saved (Connected badge).
+3. Scroll to "Weekly summary email" card.
+4. Click "Send weekly summary now".
+
+**Expected:**
+- Button shows "Sending…" spinner while in progress.
+- On success: "Sent to N teachers" confirmation appears for ~6 seconds.
+- All teacher emails receive a message with subject "[Youtopia] Weekly Summary — <date>".
+- Email body has three sections: LEAVE REQUESTS, MAKE-UP REQUESTS, NEW REGISTRATIONS, each listing items from the last 7 days (or "No … this week." if empty).
+- If EmailJS is not configured, button is disabled and a hint is shown.
+
+---
+
+## TC-08 · Weekly summary email — EmailJS config save
+
+**Requirement:** Teacher can save EmailJS credentials in Configuration → Email settings.
+
+**Steps:**
+1. Log in as a teacher. Go to Configuration → Email settings.
+2. Click Edit. Enter Service ID, Template ID, and Public Key.
+3. Click Save.
+
+**Expected:**
+- Status badge changes from "Not configured" to "Connected".
+- Service and Template IDs are shown below the badge.
+- Credentials persist after page reload (stored in Firestore).
+
+---
+
+## TC-06 · Teacher: view receipt after decision
+
+**Requirement:** After a teacher confirms or rejects a payment, they can still view the uploaded receipt image.
+
+**Steps:**
+1. Log in as a teacher.
+2. Go to Payments → Confirmed (or Rejected) tab.
+3. Find a payment that had a receipt uploaded.
+4. Click the Receipt button.
+
+**Expected:**
+- The receipt image expands inline below the payment row.
+- Clicking Hide (or Receipt again) collapses it.
+- The button is not shown if no receipt was uploaded.
