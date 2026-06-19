@@ -351,10 +351,6 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
             {errors.note && <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>{errors.note}</div>}
           </div>
 
-          <div style={{background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', lineHeight:1.6, marginBottom:'var(--sp-md)'}}>
-            <i className="ti ti-lock" /> {SEMESTER.packagePolicy}
-          </div>
-
           <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
             <div>
               <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Total</div>
@@ -628,9 +624,6 @@ function PacksTab({ sessionPacks, logSession, user, enrolledClasses }) {
       <div style={{fontSize:'var(--fs-body)', fontWeight:500, marginBottom:8}}>No active 10-hour packs</div>
       <div style={{fontSize:'var(--fs-sm)', color:'var(--color-text-secondary)', marginBottom:'var(--sp-md)', lineHeight:1.6}}>
         Purchase a 10-hour pack from the <strong>Purchase</strong> tab and the teacher will activate it once payment is confirmed.
-      </div>
-      <div style={{background:'var(--color-background-secondary)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', lineHeight:1.6}}>
-        <i className="ti ti-info-circle" /> {SEMESTER.packagePolicy}
       </div>
     </div>
   )

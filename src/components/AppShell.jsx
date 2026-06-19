@@ -21,8 +21,8 @@ const TEACHER_NAV = [
   { section:'Students' },
   { id:'tpackages', label:'Student packages', shortLabel:'Packages', icon:'ti-package' },
   { section:'Admin' },
-  { id:'tpayments', label:'Payments',         shortLabel:'Payments', icon:'ti-credit-card' },
-  { id:'tconfig',   label:'Configuration',    shortLabel:'Config',   icon:'ti-settings' },
+  { id:'tpayments',      label:'Payments',      shortLabel:'Payments', icon:'ti-credit-card' },
+  { id:'tconfig',        label:'Configuration', shortLabel:'Config',   icon:'ti-settings' },
 ]
 
 const PAGE_TITLES = {

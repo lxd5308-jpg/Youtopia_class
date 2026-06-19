@@ -43,8 +43,9 @@ const defaultTeacher = () => ({
   studentInbox:   [],
   emailConfig:      { serviceId:'', templateId:'', publicKey:'' },
   semester:         { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
-  summarySchedule:  { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 },
-  summaryLastSent:  '',
+  summarySchedule:     { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 },
+  summaryLastSent:     '',
+
 })
 
 export default function App() {
@@ -86,8 +87,9 @@ export default function App() {
           teacherEmails:    data.teacherEmails    || prev.teacherEmails,
           emailConfig:      data.emailConfig      || prev.emailConfig,
           semester:         data.semester         || prev.semester,
-          summarySchedule:  data.summarySchedule  ?? prev.summarySchedule,
-          summaryLastSent:  data.summaryLastSent  ?? prev.summaryLastSent,
+          summarySchedule:    data.summarySchedule    ?? prev.summarySchedule,
+          summaryLastSent:    data.summaryLastSent    ?? prev.summaryLastSent,
+
         }))
       } else {
         setDoc(doc(db, 'settings', 'main'), {
@@ -889,6 +891,7 @@ export default function App() {
       setSummarySchedule={setSummarySchedule}
       summaryLastSent={td.summaryLastSent||''}
       sendWeeklySummary={sendWeeklySummary}
+
     />
   )
 }
