@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isApprovedTeacher } from '../../config'
 import * as XLSX from 'xlsx'
 import { isEmailConfigured } from '../../utils/emailService'
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 // ── Colour palette for auto-assigning class colours ──────────
 const COLORS = ['#E8401A','#F47B20','#F5B800','#C94A8B','#185FA5','#0F6E56','#6B38FB','#E8401A','#F47B20','#F5B800']
@@ -63,6 +64,110 @@ function parseExcel(buffer) {
 }
 
 
+// ── Parse a Youtopia schedule PDF ────────────────────────────
+async function parsePDF(buffer) {
+  const pdfjsLib = await import('pdfjs-dist')
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
+
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
+
+  // Collect all text items with x/y positions across all pages
+  const allItems = []
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p)
+    const content = await page.getTextContent()
+    content.items.forEach(item => {
+      const text = item.str.trim()
+      if (text) allItems.push({ text, x: item.transform[4], y: item.transform[5], page: p })
+    })
+  }
+
+  // Sort: page asc → y desc (PDF y=0 is bottom) → x asc (left-to-right)
+  allItems.sort((a, b) => {
+    if (a.page !== b.page) return a.page - b.page
+    const dy = b.y - a.y
+    return Math.abs(dy) > 3 ? dy : a.x - b.x
+  })
+
+  // Group into rows by y proximity (items within 3 units share a row)
+  const rows = []
+  for (const item of allItems) {
+    const last = rows[rows.length - 1]
+    if (!last || item.page !== last.page || Math.abs(item.y - last.y) > 3) {
+      rows.push({ page: item.page, y: item.y, texts: [item.text] })
+    } else {
+      rows[rows.length - 1].texts.push(item.text)
+    }
+  }
+
+  const DAYS_ZH = ['周一','周二','周三','周四','周五','周六','周日']
+  const DAYS_EN = ['周一 Mon','周二 Tue','周三 Wed','周四 Thu','周五 Fri','周六 Sat','周日 Sun']
+
+  const classes = []
+  let category = 'kids'
+  let colorIdx = 0
+
+  for (const row of rows) {
+    const { texts } = row
+
+    // Detect section category from header rows
+    if (texts.some(t => t.includes('成人部'))) { category = 'adult'; continue }
+    if (texts.some(t => /competition\s*team/i.test(t))) { category = 'comp'; continue }
+
+    // Only parse rows that start with a Chinese weekday or "Drop"
+    const first = texts[0] || ''
+    const zhDay = DAYS_ZH.find(d => first === d)
+    const isDropIn = /^drop/i.test(first)
+    if (!zhDay && !isDropIn) continue
+
+    const days = zhDay ? DAYS_EN[DAYS_ZH.indexOf(zhDay)] : 'Any'
+
+    // Time: first text item with a time pattern (e.g. "4:30pm-6:30pm")
+    const timeIdx = texts.findIndex(t => /\d+:\d+[ap]m/i.test(t))
+    const time = timeIdx >= 0 ? texts[timeIdx] : ''
+
+    // Duration: item matching Xhr (e.g. "2hr", "1.5hr")
+    const durIdx = texts.findIndex(t => /^\d+(\.\d+)?hr$/i.test(t))
+    const duration = durIdx >= 0 ? texts[durIdx] : ''
+
+    // Sessions: integer immediately before duration
+    let sessions = 0
+    if (durIdx > 0) {
+      const n = parseInt(texts[durIdx - 1])
+      if (!isNaN(n) && n >= 1 && n <= 60) sessions = n
+    }
+
+    // Fee amounts: all $XX items
+    const feeItems = texts.filter(t => /^\$\d+$/.test(t)).map(t => parseInt(t.slice(1)))
+    const fee = feeItems[0] || 0
+
+    // Instructor: last text that isn't a number, $amount, duration, or day/time
+    const instructor = [...texts].reverse().find(t =>
+      t !== first && !/^\$\d+$/.test(t) && !/^\d+$/.test(t) &&
+      !/^\d+(\.\d+)?hr$/i.test(t) && !/\d:\d+[ap]m/i.test(t) && t.length > 0
+    ) || ''
+
+    // Class name: texts between time and the sessions count (exclusive)
+    const nameStart = timeIdx >= 0 ? timeIdx + 1 : 1
+    const sessionsIdx = durIdx > 0 ? durIdx - 1 : -1
+    const nameEnd = sessionsIdx > 0 ? sessionsIdx - 1 : durIdx > 0 ? durIdx - 1 : texts.length - 2
+    const skipSet = new Set([...feeItems.map(f => `$${f}`), String(sessions), instructor, duration].filter(Boolean))
+    const name = texts.slice(nameStart, nameEnd + 1).filter(t => !skipSet.has(t)).join(' ').trim()
+
+    if (name && (sessions > 0 || isDropIn)) {
+      classes.push({
+        id: Date.now() + colorIdx,
+        name, category, days, time, duration,
+        fee, sessions: sessions || 1, instructor,
+        color: COLORS[colorIdx % COLORS.length],
+      })
+      colorIdx++
+    }
+  }
+
+  return classes.length >= 3 ? classes : null
+}
+
 const CAT_LABEL = { kids:'少儿部 — Kids', adult:'成人部 — Adult', comp:'Competition Team' }
 
 const BLANK_CLASS = () => ({
@@ -73,8 +178,10 @@ const BLANK_CLASS = () => ({
 // ─────────────────────────────────────────────────────────────
 const fmtDate = (s) => {
   if (!s) return '—'
-  try { return new Date(s).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) }
-  catch { return s }
+  try {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+  } catch { return s }
 }
 
 const FREQ_OPTIONS = [
@@ -185,8 +292,12 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
         const buffer = await file.arrayBuffer()
         parsed = parseExcel(new Uint8Array(buffer))
         if (!parsed || parsed.length === 0) throw new Error('Could not read Excel file. Make sure the first sheet has columns: name, category, days, time, duration, fee, sessions, instructor')
+      } else if (ext === 'pdf') {
+        const buffer = await file.arrayBuffer()
+        parsed = await parsePDF(buffer)
+        if (!parsed || parsed.length === 0) throw new Error('Could not extract classes from this PDF. Please review the parsed results and edit any missing entries manually.')
       } else {
-        throw new Error('Unsupported file type. Please upload a CSV or Excel (.xlsx) file.')
+        throw new Error('Unsupported file type. Please upload a PDF, CSV, or Excel (.xlsx) file.')
       }
 
       setParsedClasses(parsed)
@@ -686,8 +797,8 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
 
         <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
           Upload your schedule and all classes in both the teacher and student portals will be updated automatically.
-          Supported formats: <strong>Excel (.xlsx) or CSV</strong>, or paste a Google Sheets link.
-          <br/>Use columns: <code>name, category, days, time, duration, fee, sessions, instructor</code>
+          Supported formats: <strong>PDF, Excel (.xlsx), or CSV</strong>, or paste a Google Sheets link.
+          <br/>PDF: upload the Youtopia schedule PDF directly. Excel/CSV: columns <code>name, category, days, time, duration, fee, sessions, instructor</code>
         </div>
 
         {/* ── Google Sheets URL input ─── */}
@@ -754,17 +865,17 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
                 <>
                   <i className="ti ti-upload" style={{fontSize:28,color:'#E8401A',display:'block',marginBottom:8}} />
                   <div>Drag & drop your schedule here, or click to browse</div>
-                  <div style={{fontSize:'var(--fs-xs)',marginTop:4,color:'var(--color-text-secondary)'}}>Excel (.xlsx) or CSV · max 20 MB</div>
+                  <div style={{fontSize:'var(--fs-xs)',marginTop:4,color:'var(--color-text-secondary)'}}>PDF, Excel (.xlsx), or CSV · max 20 MB</div>
                 </>
               )}
             </div>
-            <input id="sched-file" type="file" accept=".csv,.xlsx,.xls"
+            <input id="sched-file" type="file" accept=".pdf,.csv,.xlsx,.xls"
               style={{display:'none'}} onChange={e=>{if(e.target.files[0]) handleFile(e.target.files[0])}} />
 
             {parseError && (
               <div style={{marginTop:'var(--sp-sm)',background:'rgba(232,64,26,0.06)',border:'0.5px solid rgba(232,64,26,0.25)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-sm)',color:'#791F1F',lineHeight:1.6}}>
                 <i className="ti ti-alert-circle" /> {parseError}
-                <br/><span style={{fontSize:'var(--fs-xs)'}}>Try a clearer image, or use a CSV file instead.</span>
+                <br/><span style={{fontSize:'var(--fs-xs)'}}>Check the file and try again, or use CSV/Excel instead.</span>
               </div>
             )}
           </>

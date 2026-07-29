@@ -161,7 +161,7 @@ export default function MyClasses({
     }, 800)
   }
 
-  const semesterEnded = semester?.endDate ? new Date() > new Date(semester.endDate) : false
+  const semesterEnded = semester?.endDate ? (() => { const [y,m,d] = semester.endDate.split('-').map(Number); return new Date() > new Date(y,m-1,d) })() : false
 
   return (
     <>
@@ -215,7 +215,7 @@ export default function MyClasses({
                 <span className="card-title">{sem.semesterName || 'Past Semester'}</span>
                 {sem.semesterEnd && (
                   <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
-                    Ended {new Date(sem.semesterEnd).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                    Ended {fmtDateISO(sem.semesterEnd)}
                   </span>
                 )}
               </div>

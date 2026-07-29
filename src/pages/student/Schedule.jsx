@@ -64,10 +64,8 @@ export default function Schedule({
                   </div>
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <div style={{ fontSize:'var(--fs-sm)', fontWeight:500 }}>
-                    ${c.fee}<span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>/sess</span>
-                  </div>
-                  <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>{c.sessions} sessions</div>
+                  <div style={{ fontSize:'var(--fs-sm)', fontWeight:500 }}>${c.fee}<span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>/session</span></div>
+                  <div style={{ fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)' }}>{c.sessions} sessions · ${c.fee * c.sessions} total</div>
                 </div>
                 {isEnrolled
                   ? <span className="pill pill-ok">Enrolled</span>

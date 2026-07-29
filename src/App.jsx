@@ -42,7 +42,7 @@ const defaultTeacher = () => ({
   sentMessages:   [],
   studentInbox:   [],
   emailConfig:      { serviceId:'', templateId:'', publicKey:'' },
-  semester:         { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
+  semester:         { id: 'sem_initial', name: SEMESTER.name, startDate: '2026-08-10', endDate: '2026-12-20' },
   summarySchedule:     { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 },
   summaryLastSent:     '',
 
@@ -96,7 +96,7 @@ export default function App() {
           classes:       CLASSES,
           teacherEmails: ['summerli634@gmail.com', 'info@youtopiadanceacademy.com'],
           emailConfig:   { serviceId:'', templateId:'', publicKey:'' },
-          semester:      { id: `sem_${Date.now()}`, name: SEMESTER.name, startDate: '2026-01-05', endDate: '2026-06-14' },
+          semester:      { id: `sem_${Date.now()}`, name: SEMESTER.name, startDate: '2026-08-10', endDate: '2026-12-20' },
         })
       }
     })
