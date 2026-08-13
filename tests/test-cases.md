@@ -119,7 +119,43 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 **Expected:**
 - Status badge changes from "Not configured" to "Connected".
 - Service and Template IDs are shown below the badge.
-- Credentials persist after page reload (stored in Firestore).
+- Credentials persist after page reload (stored in Firestore at `settings/main.emailConfig`).
+- On mobile (≤ 480px) the three credential fields stack full-width; on desktop they sit on one row.
+
+---
+
+## TC-09 · Summary email — failed send must not record a success
+
+**Requirement:** `summaryLastSent` is only written when at least one email was actually delivered. A total failure must not display "Last sent" or suppress the next scheduled attempt.
+
+**Steps:**
+1. Log in as a teacher. Go to Configuration → Email settings.
+2. Click Edit and change the Service ID to an invalid value (e.g. `service_broken`). Save.
+3. Scroll to Summary email → click "Send summary now".
+
+**Expected:**
+- An error is shown ("N failed — …" or "Failed — check EmailJS settings").
+- The "Last sent" date does **not** change (still shows the previous value, or nothing).
+- Restore the correct Service ID and send again — "Last sent" updates to today.
+- Same rule applies to the scheduled Cloud Function: if every recipient fails it logs
+  "Summary FAILED for all N teachers" and leaves `summaryLastSent` untouched.
+
+---
+
+## TC-10 · Summary email — scheduled send is actually deployed
+
+**Requirement:** The automated summary depends on the `weeklyTeacherSummary` Cloud Function existing in the Firebase project. Shipping the frontend alone does not deliver it.
+
+**Steps:**
+1. Run `firebase functions:list`.
+2. Confirm `weeklyTeacherSummary` is listed for project `youtopia-3e141`.
+3. In the Firebase console, check the function's logs after the next scheduled 9 AM Pacific run.
+
+**Expected:**
+- The function is listed (requires the Blaze plan and the Cloud Functions API enabled).
+- Logs show either "Summary sent to N/N teachers" or a skip reason
+  ("Not scheduled for this hour", "EmailJS not configured", "No teacher emails").
+- Teachers receive the email on the configured day.
 
 ---
 

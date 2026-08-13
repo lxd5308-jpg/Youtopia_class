@@ -198,7 +198,7 @@ const DAY_OPTIONS = [
 
 const DEFAULT_SCHED = { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 }
 
-export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester, emailConfig={}, summarySchedule={}, setSummarySchedule, summaryLastSent='', sendWeeklySummary }) {
+export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester, emailConfig={}, setEmailConfig, summarySchedule={}, setSummarySchedule, summaryLastSent='', sendWeeklySummary }) {
   // ── Semester state ──────────────────────────────────────────
   const [semDraft,    setSemDraft]    = useState(null)   // null=view, object=editing
   const [semFlash,    setSemFlash]    = useState(false)
@@ -237,6 +237,24 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
     setClasses(prev => [...prev, cls])
     setNewClass(BLANK_CLASS())
     setAddingNew(false)
+  }
+
+  // ── EmailJS credentials state ───────────────────────────────
+  const [cfgDraft, setCfgDraft] = useState(null)   // null=view, object=editing
+  const [cfgFlash, setCfgFlash] = useState(false)
+
+  const emailReady = isEmailConfigured(emailConfig)
+
+  function saveEmailConfig() {
+    const cfg = {
+      serviceId:  (cfgDraft.serviceId  || '').trim(),
+      templateId: (cfgDraft.templateId || '').trim(),
+      publicKey:  (cfgDraft.publicKey  || '').trim(),
+    }
+    if (setEmailConfig) setEmailConfig(cfg)
+    setCfgDraft(null)
+    setCfgFlash(true)
+    setTimeout(() => setCfgFlash(false), 2500)
   }
 
   // ── Weekly summary state ────────────────────────────────────────
@@ -662,6 +680,66 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
         </div>
       </div>
 
+      {/* ── EmailJS credentials ─────────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr">
+          <span className="card-title">Email settings</span>
+          {!cfgDraft && (
+            <button className="btn" style={{fontSize:'var(--fs-xs)'}}
+              onClick={() => setCfgDraft({ serviceId:'', templateId:'', publicKey:'', ...emailConfig })}>
+              <i className="ti ti-pencil" /> Edit
+            </button>
+          )}
+        </div>
+        <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
+          Credentials from your <strong>EmailJS</strong> account. Until these are saved, no email leaves the app — teacher messages and the summary email are both silently skipped.
+        </div>
+
+        {cfgDraft ? (
+          <div>
+            <div style={{display:'flex',gap:'var(--sp-sm)',flexWrap:'wrap',marginBottom:'var(--sp-md)'}}>
+              <div style={{flex:'1 1 200px',minWidth:0}}>
+                <label className="form-label">Service ID</label>
+                <input type="text" value={cfgDraft.serviceId} placeholder="service_xxxxxxx"
+                  onChange={e=>setCfgDraft(d=>({...d,serviceId:e.target.value}))} />
+              </div>
+              <div style={{flex:'1 1 200px',minWidth:0}}>
+                <label className="form-label">Template ID</label>
+                <input type="text" value={cfgDraft.templateId} placeholder="template_xxxxxxx"
+                  onChange={e=>setCfgDraft(d=>({...d,templateId:e.target.value}))} />
+              </div>
+              <div style={{flex:'1 1 200px',minWidth:0}}>
+                <label className="form-label">Public key</label>
+                <input type="text" value={cfgDraft.publicKey} placeholder="e.g. AbC1dEfGhIjKlMnOp"
+                  onChange={e=>setCfgDraft(d=>({...d,publicKey:e.target.value}))} />
+              </div>
+            </div>
+            <div style={{display:'flex',gap:'var(--sp-sm)',flexWrap:'wrap'}}>
+              <button className="btn" onClick={() => setCfgDraft(null)}>Cancel</button>
+              <button className="btn btn-p" onClick={saveEmailConfig}>
+                <i className="ti ti-check" /> Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span className={`pill ${emailReady ? 'pill-ok' : 'pill-no'}`}>
+              {emailReady ? 'Connected' : 'Not configured'}
+            </span>
+            {emailReady && (
+              <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',wordBreak:'break-all'}}>
+                Service: {emailConfig.serviceId} · Template: {emailConfig.templateId}
+              </span>
+            )}
+            {cfgFlash && <span style={{fontSize:'var(--fs-xs)',color:'#27500A'}}><i className="ti ti-check" /> Saved</span>}
+          </div>
+        )}
+
+        <div style={{marginTop:'var(--sp-md)',background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',lineHeight:1.6}}>
+          <i className="ti ti-info-circle" /> Find these under Account → API Keys and Email Services at emailjs.com. For the scheduled summary email to send from the server, also turn on “Allow EmailJS API for non-browser applications” in the EmailJS account security settings.
+        </div>
+      </div>
+
       {/* ── Summary email schedule ──────────────────────────── */}
       <div className="card">
         <div className="card-hdr">
@@ -778,7 +856,7 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
           )}
           {!isEmailConfigured(emailConfig) && !summResult && (
             <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
-              <i className="ti ti-info-circle" /> EmailJS not configured
+              <i className="ti ti-info-circle" /> EmailJS not configured — add credentials in Email settings above
             </span>
           )}
         </div>

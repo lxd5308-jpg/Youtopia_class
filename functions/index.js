@@ -216,9 +216,16 @@ async function buildAndSendSummary(db) {
     }
   }
 
-  // Record the send date so we don't double-send
-  await db.collection('settings').doc('main').set({ summaryLastSent: getPacificDateISO() }, { merge: true })
-  console.log(`Summary sent to ${sent}/${teacherEmails.length} teachers.`)
+  // Record the send date so we don't double-send — but only if at least one
+  // email actually went out. Writing it unconditionally makes a total failure
+  // look like a success in the Configuration page ("Last sent: <today>") and
+  // suppresses any retry.
+  if (sent > 0) {
+    await db.collection('settings').doc('main').set({ summaryLastSent: getPacificDateISO() }, { merge: true })
+    console.log(`Summary sent to ${sent}/${teacherEmails.length} teachers.`)
+  } else {
+    console.error(`Summary FAILED for all ${teacherEmails.length} teachers — summaryLastSent not updated.`)
+  }
 }
 
 // Runs once daily at 9 AM Pacific and checks the configured schedule

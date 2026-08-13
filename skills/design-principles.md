@@ -20,6 +20,16 @@ When the user requests a fix or correction, extract the general principle behind
 
 ---
 
+## State & Backend
+
+- **Never record success state unless something actually succeeded.** Fields like `summaryLastSent` are written only when at least one send returned OK. Writing them unconditionally turns a total failure into a UI that reports success and suppresses the retry — the worst kind of bug, because nobody notices it. Guard every "last done at" write with the result of the operation, and log loudly on total failure.
+
+- **Every setting the backend reads must have a UI that writes it.** `emailConfig` was read by both the app and the Cloud Function but no screen ever saved it, so the feature could only ever fail. When adding a Firestore field a server or scheduled job depends on, add the setter and the form control in the same change.
+
+- **Server-side code is not shipped by the frontend deploy.** `npm run build` + Cloudflare only publishes [src/](../src/). Anything in [functions/](../functions/) needs a separate `firebase deploy --only functions` (Blaze plan required). A committed Cloud Function is not a running Cloud Function — verify with `firebase functions:list`.
+
+---
+
 ## Cross-platform
 
 - **All UI must work on mobile and desktop.** Every layout change must be reasoned through at both ≥ 320px mobile width and full desktop width before being marked complete. See the Cross-platform requirement in CLAUDE.md.

@@ -265,6 +265,14 @@ export default function App() {
     })
   }
 
+  const setEmailConfig = (v) => {
+    setTd(prev => {
+      const emailConfig = applyFn(v, prev.emailConfig)
+      setDoc(doc(db, 'settings', 'main'), { emailConfig }, { merge: true })
+      return { ...prev, emailConfig }
+    })
+  }
+
   const setSummarySchedule = (v) => {
     setTd(prev => {
       const summarySchedule = applyFn(v, prev.summarySchedule)
@@ -774,10 +782,15 @@ export default function App() {
       subject:  `[Youtopia] Weekly Summary — ${weekOf}`,
       message:  lines.join('\n'),
     })
-    const p = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
-    const todayISO = `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-${String(p.getDate()).padStart(2,'0')}`
-    await setDoc(doc(db, 'settings', 'main'), { summaryLastSent: todayISO }, { merge: true })
-    setTd(prev => ({ ...prev, summaryLastSent: todayISO }))
+    // Only record the send date if at least one email actually went out —
+    // otherwise "Last sent" would report a success that never happened and the
+    // Cloud Function would skip its own attempt for the rest of the day.
+    if (result.sent > 0) {
+      const p = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+      const todayISO = `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-${String(p.getDate()).padStart(2,'0')}`
+      await setDoc(doc(db, 'settings', 'main'), { summaryLastSent: todayISO }, { merge: true })
+      setTd(prev => ({ ...prev, summaryLastSent: todayISO }))
+    }
     return result
   }
 
@@ -899,6 +912,7 @@ export default function App() {
       sendStudentMessage={sendStudentMessage}
       markMessageRead={markMessageRead}
       emailConfig={td.emailConfig||{}}
+      setEmailConfig={setEmailConfig}
       summarySchedule={td.summarySchedule||{}}
       setSummarySchedule={setSummarySchedule}
       summaryLastSent={td.summaryLastSent||''}
