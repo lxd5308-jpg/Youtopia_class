@@ -92,9 +92,11 @@ function shouldSendToday(schedule, lastSentISO) {
 }
 
 async function buildAndSendSummary(db) {
-  // Load settings
-  const settingsSnap = await db.collection('settings').doc('main').get()
-  if (!settingsSnap.exists) { console.log('No settings — aborting.'); return }
+  // Load settings. The teacher allow-list, EmailJS credentials and the
+  // summary schedule live in settings/private (teacher-only); settings/main
+  // holds just the class list and semester, which students may read.
+  const settingsSnap = await db.collection('settings').doc('private').get()
+  if (!settingsSnap.exists) { console.log('No settings/private — aborting.'); return }
 
   const data = settingsSnap.data()
   const { emailConfig, teacherEmails = [], summarySchedule = {}, summaryLastSent = '' } = data
@@ -221,7 +223,7 @@ async function buildAndSendSummary(db) {
   // look like a success in the Configuration page ("Last sent: <today>") and
   // suppresses any retry.
   if (sent > 0) {
-    await db.collection('settings').doc('main').set({ summaryLastSent: getPacificDateISO() }, { merge: true })
+    await db.collection('settings').doc('private').set({ summaryLastSent: getPacificDateISO() }, { merge: true })
     console.log(`Summary sent to ${sent}/${teacherEmails.length} teachers.`)
   } else {
     console.error(`Summary FAILED for all ${teacherEmails.length} teachers — summaryLastSent not updated.`)

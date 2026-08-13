@@ -97,30 +97,42 @@ export default function App() {
 
     const isTeacher = role === 'teacher'
 
+    // settings/main — class list and semester dates. Readable by everyone
+    // signed in, because every student page needs it.
     const unsubSettings = onSnapshot(doc(db, 'settings', 'main'), snap => {
       if (snap.exists()) {
         const data = snap.data()
         setTd(prev => ({
           ...prev,
-          classes:          data.classes          || prev.classes,
-          teacherEmails:    data.teacherEmails    || prev.teacherEmails,
-          emailConfig:      data.emailConfig      || prev.emailConfig,
-          semester:         data.semester         || prev.semester,
-          summarySchedule:    data.summarySchedule    ?? prev.summarySchedule,
-          summaryLastSent:    data.summaryLastSent    ?? prev.summaryLastSent,
-
+          classes:  data.classes  || prev.classes,
+          semester: data.semester || prev.semester,
         }))
       } else if (isTeacher) {
         // Only teachers may write settings/main under the Firestore rules;
         // a student hitting this branch would just log a permission error.
         setDoc(doc(db, 'settings', 'main'), {
-          classes:       CLASSES,
-          teacherEmails: ['summerli634@gmail.com', 'info@youtopiadanceacademy.com'],
-          emailConfig:   { serviceId:'', templateId:'', publicKey:'' },
-          semester:      { id: `sem_${Date.now()}`, name: SEMESTER.name, startDate: '2026-08-10', endDate: '2026-12-20' },
+          classes:  CLASSES,
+          semester: { id: `sem_${Date.now()}`, name: SEMESTER.name, startDate: '2026-08-10', endDate: '2026-12-20' },
         })
       }
     })
+
+    // settings/private — teacher allow-list and EmailJS credentials.
+    // Deliberately teacher-only: Firestore rules are per-document, so these
+    // fields had to leave settings/main to stop students reading them.
+    const unsubPrivate = isTeacher
+      ? onSnapshot(doc(db, 'settings', 'private'), snap => {
+          if (!snap.exists()) return
+          const data = snap.data()
+          setTd(prev => ({
+            ...prev,
+            teacherEmails:   data.teacherEmails   || prev.teacherEmails,
+            emailConfig:     data.emailConfig     || prev.emailConfig,
+            summarySchedule: data.summarySchedule ?? prev.summarySchedule,
+            summaryLastSent: data.summaryLastSent ?? prev.summaryLastSent,
+          }))
+        })
+      : () => {}
 
     // Students see only their own payments; teachers see all of them.
     // Student pages (Dashboard, Hub) already filter by studentEmail, so the
@@ -172,7 +184,7 @@ export default function App() {
     }
 
     globalUnsubRef.current = () => {
-      unsubSettings(); unsubPayments()
+      unsubSettings(); unsubPrivate(); unsubPayments()
       teacherUnsubs.forEach(u => u())
     }
   }
@@ -282,7 +294,7 @@ export default function App() {
   const setTeacherEmails = (v) => {
     setTd(prev => {
       const teacherEmails = applyFn(v, prev.teacherEmails)
-      setDoc(doc(db, 'settings', 'main'), { teacherEmails }, { merge: true })
+      setDoc(doc(db, 'settings', 'private'), { teacherEmails }, { merge: true })
       return { ...prev, teacherEmails }
     })
   }
@@ -290,7 +302,7 @@ export default function App() {
   const setEmailConfig = (v) => {
     setTd(prev => {
       const emailConfig = applyFn(v, prev.emailConfig)
-      setDoc(doc(db, 'settings', 'main'), { emailConfig }, { merge: true })
+      setDoc(doc(db, 'settings', 'private'), { emailConfig }, { merge: true })
       return { ...prev, emailConfig }
     })
   }
@@ -298,7 +310,7 @@ export default function App() {
   const setSummarySchedule = (v) => {
     setTd(prev => {
       const summarySchedule = applyFn(v, prev.summarySchedule)
-      setDoc(doc(db, 'settings', 'main'), { summarySchedule }, { merge: true })
+      setDoc(doc(db, 'settings', 'private'), { summarySchedule }, { merge: true })
       return { ...prev, summarySchedule }
     })
   }
@@ -810,7 +822,7 @@ export default function App() {
     if (result.sent > 0) {
       const p = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
       const todayISO = `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}-${String(p.getDate()).padStart(2,'0')}`
-      await setDoc(doc(db, 'settings', 'main'), { summaryLastSent: todayISO }, { merge: true })
+      await setDoc(doc(db, 'settings', 'private'), { summaryLastSent: todayISO }, { merge: true })
       setTd(prev => ({ ...prev, summaryLastSent: todayISO }))
     }
     return result

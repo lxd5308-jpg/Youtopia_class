@@ -28,13 +28,20 @@ service cloud.firestore {
 
     // email_verified matters: without it, someone could register an
     // email/password account claiming a teacher's address and inherit access.
+    // The runtime allow-list lives in settings/private, which students cannot
+    // read. get() inside a rule bypasses rules, so this works for everyone.
+    // exists() guards the case where the doc has not been created yet, and
+    // .get('teacherEmails', []) the case where the field is missing —
+    // either would otherwise error and deny every teacher.
+    function allowListTeacher() {
+      return exists(/databases/$(database)/documents/settings/private)
+        && email() in get(/databases/$(database)/documents/settings/private).data.get('teacherEmails', []);
+    }
+
     function isTeacher() {
       return signedIn()
         && request.auth.token.email_verified == true
-        && (
-          rootTeacher()
-          || email() in get(/databases/$(database)/documents/settings/main).data.teacherEmails
-        );
+        && (rootTeacher() || allowListTeacher());
     }
 
     // students/{id} is keyed by encodeURIComponent(email), so for a normal
@@ -50,12 +57,15 @@ service cloud.firestore {
     function willOwn() { return signedIn() && request.resource.data.studentEmail.lower() == email(); }
 
     // ── Shared configuration ────────────────────────────────────────────
-    // Class list and semester dates: every signed-in user reads them.
-    // Teacher-only write is what closes the escalation path.
+    // settings/main holds ONLY the class list and semester dates, which every
+    // student page needs. Rules are per-document, not per-field, so anything
+    // students must not read has to live in a different document —
+    // that is settings/private (teacherEmails, emailConfig, summary schedule).
     match /settings/main {
       allow read:  if signedIn();
       allow write: if isTeacher();
     }
+    // Covers settings/private and any future config doc: teachers only.
     match /settings/{other} {
       allow read, write: if isTeacher();
     }
@@ -75,12 +85,22 @@ service cloud.firestore {
       allow update, delete: if isTeacher();
     }
 
+    // A make-up is stored as a nested object on the student's own leave
+    // request, so students must be able to update these documents —
+    // requestMakeup() writes {makeup} onto an existing doc, and by design it
+    // is auto-approved client-side (status:'approved').
+    // Once a teacher has ruled on it, resolveMakeup() stamps makeup.resolvedAt;
+    // from that point the document is teacher-only, so a student cannot
+    // overwrite a decline with another auto-approved make-up.
+    function makeupResolvedByTeacher() {
+      return resource.data.get('makeup', {}).get('resolvedAt', '') != '';
+    }
+
     match /leaveRequests/{id} {
       allow read:   if isTeacher() || owns();
       allow create: if isTeacher() || willOwn();
-      // A student may amend their own request (adding a make-up) but cannot
-      // reassign it to someone else.
-      allow update: if isTeacher() || (owns() && willOwn());
+      // Owner before and after, so a student cannot reassign it to someone else.
+      allow update: if isTeacher() || (owns() && willOwn() && !makeupResolvedByTeacher());
       allow delete: if isTeacher();
     }
 

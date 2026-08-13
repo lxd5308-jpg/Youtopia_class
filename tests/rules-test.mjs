@@ -13,6 +13,9 @@ const DB = `/databases/(default)/documents`
 const TEACHER = 'summerli634@gmail.com'
 const STUDENT = 'kid@example.com'
 const OTHER = 'someoneelse@example.com'
+// A teacher who is NOT hard-coded in the rules — granted only via the
+// settings/private allow-list, like anniechang0719@gmail.com in production.
+const ALLOWLIST_TEACHER = 'allowlisted@teacher.com'
 
 const auth = (mail, verified = true) => ({
   uid: 'u_' + mail,
@@ -39,13 +42,20 @@ function tc(name, expectation, { path, method, mail, verified = true, data, newD
     test.resource = res(data)
     delete test.request.resource
   }
-  // isTeacher() calls get() on settings/main — mock it so the test does not
-  // depend on live data.
-  test.functionMocks = [{
-    function: 'get',
-    args: [{ exactValue: `${DB}/settings/main` }],
-    result: { value: { data: { teacherEmails: [TEACHER, 'extra@teacher.com'] } } },
-  }]
+  // isTeacher() calls exists() and get() on settings/private — mock both so
+  // the tests do not depend on live data.
+  test.functionMocks = [
+    {
+      function: 'get',
+      args: [{ exactValue: `${DB}/settings/private` }],
+      result: { value: { data: { teacherEmails: [TEACHER, ALLOWLIST_TEACHER] } } },
+    },
+    {
+      function: 'exists',
+      args: [{ exactValue: `${DB}/settings/private` }],
+      result: { value: true },
+    },
+  ]
   return { name, test }
 }
 
@@ -101,6 +111,35 @@ const cases = [
      { path: '/leaveRequests/l1', method: 'update', mail: STUDENT, data: OWNED, newData: NOT_OWNED }),
   tc('student CANNOT read another leave request', 'DENY',
      { path: '/leaveRequests/l2', method: 'get', mail: STUDENT, data: NOT_OWNED }),
+
+  // ── settings/private: the whole point of the split ───────────
+  tc('student CANNOT read settings/private (EmailJS creds)', 'DENY',
+     { path: '/settings/private', method: 'get', mail: STUDENT, data: { emailConfig: { serviceId: 's' } } }),
+  tc('teacher CAN read settings/private', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: TEACHER, data: { emailConfig: { serviceId: 's' } } }),
+  tc('allow-listed (non-root) teacher CAN read settings/private', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: ALLOWLIST_TEACHER, data: { emailConfig: { serviceId: 's' } } }),
+  tc('student CANNOT write settings/private (escalation)', 'DENY',
+     { path: '/settings/private', method: 'update', mail: STUDENT, data: { teacherEmails: [TEACHER] }, newData: { teacherEmails: [TEACHER, STUDENT] } }),
+  tc('teacher CAN write settings/private', 'ALLOW',
+     { path: '/settings/private', method: 'update', mail: TEACHER, data: { teacherEmails: [TEACHER] }, newData: { teacherEmails: [TEACHER, 'new@t.com'] } }),
+  tc('anonymous cannot read settings/private', 'DENY',
+     { path: '/settings/private', method: 'get', data: { emailConfig: {} } }),
+
+  // ── make-up guard ────────────────────────────────────────────
+  // Make-ups are auto-approved by design, so this must still work:
+  tc('student CAN auto-approve a fresh make-up on own leave', 'ALLOW',
+     { path: '/leaveRequests/l3', method: 'update', mail: STUDENT,
+       data: OWNED,
+       newData: { ...OWNED, makeup: { className: 'X', status: 'approved', autoApprovedAt: 'Aug 13, 2026' } } }),
+  tc('student CANNOT overwrite a make-up the teacher resolved', 'DENY',
+     { path: '/leaveRequests/l4', method: 'update', mail: STUDENT,
+       data: { ...OWNED, makeup: { className: 'X', status: 'declined', resolvedAt: 'Aug 12, 2026' } },
+       newData: { ...OWNED, makeup: { className: 'X', status: 'approved' } } }),
+  tc('teacher CAN still edit a resolved make-up', 'ALLOW',
+     { path: '/leaveRequests/l4', method: 'update', mail: TEACHER,
+       data: { ...OWNED, makeup: { className: 'X', status: 'declined', resolvedAt: 'Aug 12, 2026' } },
+       newData: { ...OWNED, makeup: { className: 'X', status: 'approved', resolvedAt: 'Aug 13, 2026' } } }),
 
   // ── teacher-only ledger ──────────────────────────────────────
   tc('student CANNOT read paymentHistory', 'DENY',
