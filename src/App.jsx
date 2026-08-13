@@ -10,6 +10,7 @@ import AppShell from './components/AppShell'
 import { CLASSES, SEMESTER } from './data/mockData'
 import { sendEmailToMany, isEmailConfigured } from './utils/emailService'
 import { verifyTeacherAccess } from './utils/teacherAccess'
+import { TEACHER_EMAILS } from './config'
 
 const applyFn  = (v, prev) => typeof v === 'function' ? v(prev) : v
 const nowStr   = () => new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -122,7 +123,18 @@ export default function App() {
     // fields had to leave settings/main to stop students reading them.
     const unsubPrivate = isTeacher
       ? onSnapshot(doc(db, 'settings', 'private'), snap => {
-          if (!snap.exists()) return
+          if (!snap.exists()) {
+            // Never leave this doc missing: the Firestore rules read the
+            // allow-list from it, so without it only the hard-coded root
+            // teachers can get in.
+            setDoc(doc(db, 'settings', 'private'), {
+              teacherEmails:   TEACHER_EMAILS,
+              emailConfig:     { serviceId:'', templateId:'', publicKey:'' },
+              summarySchedule: { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 },
+              summaryLastSent: '',
+            })
+            return
+          }
           const data = snap.data()
           setTd(prev => ({
             ...prev,

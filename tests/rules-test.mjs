@@ -1,5 +1,16 @@
-// Verifies the phase-2 Firestore rules with the Firebase Rules test API
+// Verifies the Firestore rules with the Firebase Rules test API
 // (server-side evaluation, no emulator and no deploy).
+//
+// Two things the API does that will waste your afternoon otherwise:
+//  1. It has NO database access. get() and exists() are not implemented —
+//     an unmocked call fails with "Function not found: exists", which reads
+//     as a DENY. Every rule path that touches settings/private therefore
+//     needs a functionMock, and the mock below mirrors the live document.
+//  2. It URL-decodes request paths once. students/{id} keys are
+//     encodeURIComponent(email), so a doc ID containing a literal '%40'
+//     must be written '%2540' here.
+//
+// Run: node tests/rules-test.mjs firestore.rules
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 

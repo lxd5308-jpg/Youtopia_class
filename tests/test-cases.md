@@ -179,17 +179,21 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 
 ## TC-12 · Security: a student cannot grant themselves teacher access
 
-**Requirement:** `settings/main` is writable by teachers only. This is the document holding `teacherEmails`, which `verifyTeacherAccess` consults, so a student write here would be a full privilege escalation.
+**Requirement:** `teacherEmails` lives in `settings/private`, which is teacher read/write only. It is the list `verifyTeacherAccess` consults, so any student access to it would be a full privilege escalation.
 
 **Steps:**
 1. Log in as a student. In the console, attempt
-   `setDoc(doc(db,'settings','main'),{teacherEmails:['me@example.com']},{merge:true})`.
-2. Attempt the same as a teacher.
+   `getDoc(doc(db,'settings','private'))` and then
+   `setDoc(doc(db,'settings','private'),{teacherEmails:['me@example.com']},{merge:true})`.
+2. Attempt both as a teacher.
 
 **Expected:**
-- The student write fails with `permission-denied`; the teacher write succeeds.
+- Both student operations fail with `permission-denied` — a student cannot even
+  read the document, so the EmailJS credentials are not exposed either.
+- Both teacher operations succeed.
 - Reading `settings/main` still works as a student (the class list and semester
-  dates come from it and every student page needs them).
+  dates come from it and every student page needs them), and it no longer
+  contains `teacherEmails` or `emailConfig`.
 
 ---
 
@@ -205,6 +209,25 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 - Creation succeeds and the payment appears as Pending.
 - The status update fails with `permission-denied`.
 - A teacher confirming the same payment from the Payments page succeeds.
+
+---
+
+## TC-14 · Security: a teacher granted only via the allow-list can still sign in
+
+**Requirement:** Teachers who are NOT hard-coded in `config.js` / the rules' root list — currently `anniechang0719@gmail.com` and `feiafei@gmail.com` — get their access from `settings/private.teacherEmails`. The Firestore rules resolve that list with `exists()` + `get()`, which cannot be exercised by the offline rules tests (the Rules API has no database access), so this path is only provable in production.
+
+**Steps:**
+1. Log in as `anniechang0719@gmail.com` (or `feiafei@gmail.com`) and choose Teacher.
+2. Open Configuration.
+3. Log in as a root teacher (`summerli634@gmail.com`) and confirm the same.
+
+**Expected:**
+- The allow-listed teacher reaches the teacher portal, and Configuration shows the
+  full teacher list, the semester, and Email settings as "Connected".
+- If instead they are bounced to the student view, the rules could not read
+  `settings/private` — re-check that the document exists and holds `teacherEmails`.
+- Root teachers bypass the allow-list via the hard-coded list, so testing only
+  with them does **not** cover this case.
 
 ---
 

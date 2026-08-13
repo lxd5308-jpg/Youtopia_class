@@ -24,13 +24,17 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **Firestore rules are the only real access control — client checks are decoration.** `verifyTeacherAccess`, role flags and hidden UI all run in the user's browser and can be bypassed by talking to Firestore directly (the API key and project ID ship in the public bundle). Any rule of the form `allow read, write: if request.auth != null` means "every signed-in account owns the whole database". Rules live in [firestore.rules](../firestore.rules) and deploy with `firebase deploy --only firestore:rules` — no Blaze plan needed.
 
-- **Never let the client write the document that grants permissions.** `settings/main.teacherEmails` decides who is a teacher, so it must be teacher-writable only, and the rules keep a hard-coded root teacher list so a bad write can never lock everyone out. Any "who is an admin" data must be unwritable by the people it would promote.
+- **Never let the client write the document that grants permissions.** `settings/private.teacherEmails` decides who is a teacher, so it is teacher read/write only, and the rules keep a hard-coded root teacher list so a bad write can never lock everyone out. Any "who is an admin" data must be unwritable by the people it would promote.
 
 - **A `match /{document=**}` catch-all silently defeats every specific rule above it.** Rules are permissive-OR: if any match grants access, access is granted. Enumerate collections explicitly and let unlisted paths fall through to denied.
 
 - **Never subscribe a client to a collection it only needs one row of.** Students used to load every payment, receipt and leave request and filter in the browser — everyone's data, in everyone's browser. Scope the query (`where('studentEmail','==',email)`) so the server sends only what that user may see; the rules then enforce the same boundary.
 
-- **Verify rules before deploying them.** The Rules API evaluates a test suite server-side without deploying (`POST firebaserules.googleapis.com/v1/projects/<id>:test`), which works without Java or the emulator. Note it URL-decodes request paths once, so a document ID containing a literal `%40` must be written `%2540` in a test.
+- **Verify rules before deploying them.** The Rules API evaluates a test suite server-side without deploying (`POST firebaserules.googleapis.com/v1/projects/<id>:test`), which works without Java or the emulator — see [tests/rules-test.mjs](../tests/rules-test.mjs). Two traps: it has **no database access**, so `get()`/`exists()` must be supplied via `functionMocks` or they fail as "Function not found" and look like a deny; and it URL-decodes paths once, so a document ID containing a literal `%40` must be written `%2540`.
+
+- **Secrets need their own document, not their own field.** Firestore rules grant per-document, so a field that must stay hidden cannot live beside data everyone reads. `settings/main` holds only the class list and semester (student-readable); `teacherEmails`, `emailConfig` and the summary schedule live in `settings/private` (teacher-only).
+
+- **Check what the code actually does before hardening it.** The "students shouldn't approve their own make-ups" rule would have broken the feature: `requestMakeup` sets `status:'approved'` on purpose. The guard that was actually needed protects the teacher's *decision* (`makeup.resolvedAt`), not the initial request.
 
 ---
 
