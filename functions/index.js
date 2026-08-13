@@ -121,6 +121,11 @@ async function buildAndSendSummary(db) {
   }
   if (teacherEmails.length === 0) { console.log('No teacher emails — aborting.'); return }
 
+  // Presence only, never the value. A strict-mode account rejects every send
+  // without this, so knowing it reached the function is the first thing you
+  // want when the summary stops arriving.
+  console.log(`EmailJS private key configured: ${EMAILJS_PRIVATE_KEY.value() ? 'yes' : 'no'}`)
+
   if (!shouldSendToday(summarySchedule, summaryLastSent)) {
     console.log('Not scheduled for this hour — skipping.')
     return
