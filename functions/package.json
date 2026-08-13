@@ -2,7 +2,7 @@
   "name": "youtopia-functions",
   "version": "1.0.0",
   "description": "Firebase Cloud Functions — weekly teacher summary email",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "main": "index.js",
   "type": "module",
   "dependencies": {
