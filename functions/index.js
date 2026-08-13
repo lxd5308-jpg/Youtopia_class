@@ -51,11 +51,22 @@ async function sendEmail(cfg, { to, toName, subject, message }) {
   }
 }
 
-// Parse locale date strings used by the app ("Jun 8, 2026" or "Jun 8, 2026, 10:30 AM")
+// Parse locale date strings used by the app. The app has written two formats
+// over time and both must work:
+//   "Aug 11, 2026 at 11:46 PM"   (current)
+//   "Jun 4, 2026, 08:53 PM"      (older)
+//   "Aug 13, 2026"               (date only, e.g. session logs)
+// The " at " variant used to fall through to Invalid Date, which made
+// isWithinWeek() false for every recent record — so leave requests, make-ups
+// and package purchases silently vanished from the summary.
 function parseAppDate(str) {
   if (!str) return null
-  const clean = str.replace(/,\s*\d{1,2}:\d{2}\s*(AM|PM)/i, '')
-  const d = new Date(clean)
+  let clean = String(str).trim().replace(/\s+at\s+/i, ', ')
+  let d = new Date(clean)
+  if (!isNaN(d.getTime())) return d
+  // Last resort: drop the time entirely and keep the date.
+  clean = clean.replace(/,\s*\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?\s*$/i, '')
+  d = new Date(clean)
   return isNaN(d.getTime()) ? null : d
 }
 

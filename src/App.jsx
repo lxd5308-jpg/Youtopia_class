@@ -447,6 +447,25 @@ export default function App() {
       cart: [...(d.cart||[]).filter(i => i.classId !== cls.id), { classId: cls.id, packageType: 'full' }],
       enrolled: [...new Set([...(d.enrolled||[]), cls.id])],
     }))
+
+    // Also record a timestamped enrollment document. students/{id}.enrolled is
+    // only a list of class ids with no dates, so it cannot answer "who signed
+    // up this week" — and the enrollments collection is what the teacher
+    // Roster, the Dashboard student count, Messages recipient filtering and
+    // the weekly summary all read. Before this, auto-enrolment wrote none of
+    // them and every one of those screens was empty.
+    const email = studentEmailRef.current
+    if (email) {
+      const enrollId = `${encEmail(email)}_${cls.id}`
+      setDoc(doc(db, 'enrollments', enrollId), {
+        classId:      cls.id,
+        className:    cls.name || '',
+        studentEmail: email,
+        studentName:  sd.studentName || '',
+        pkgType:      'full',
+        enrolledAt:   nowStr(),
+      }, { merge: true }).catch(err => console.error('Enrollment record failed:', err))
+    }
   }
 
   // ── addPackToCart — atomically adds 10-hour pack to cart ───────
@@ -733,10 +752,22 @@ export default function App() {
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
+    // Parse locale date strings used by the app. The app has written two formats
+    // over time and both must work:
+    //   "Aug 11, 2026 at 11:46 PM"   (current)
+    //   "Jun 4, 2026, 08:53 PM"      (older)
+    //   "Aug 13, 2026"               (date only, e.g. session logs)
+    // The " at " variant used to fall through to Invalid Date, which made
+    // isWithinWeek() false for every recent record — so leave requests, make-ups
+    // and package purchases silently vanished from the summary.
     function parseAppDate(str) {
       if (!str) return null
-      const clean = str.replace(/,\s*\d{1,2}:\d{2}\s*(AM|PM)/i, '')
-      const d = new Date(clean)
+      let clean = String(str).trim().replace(/\s+at\s+/i, ', ')
+      let d = new Date(clean)
+      if (!isNaN(d.getTime())) return d
+      // Last resort: drop the time entirely and keep the date.
+      clean = clean.replace(/,\s*\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?\s*$/i, '')
+      d = new Date(clean)
       return isNaN(d.getTime()) ? null : d
     }
     function isWithinWeek(str) {
