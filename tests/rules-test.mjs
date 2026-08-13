@@ -137,6 +137,24 @@ const cases = [
   tc('anonymous cannot read settings/private', 'DENY',
      { path: '/settings/private', method: 'get', data: { emailConfig: {} } }),
 
+  // ── root teachers work without the allow-list ────────────────
+  // These four are hard-coded in rootTeacher(). The mock's allow-list holds
+  // only TEACHER and ALLOWLIST_TEACHER, so passing here proves they are
+  // granted directly by the rules and do not depend on settings/private
+  // being readable at all.
+  tc('anniechang is a root teacher (not via allow-list)', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: 'anniechang0719@gmail.com', data: { emailConfig: {} } }),
+  tc('feiafei is a root teacher (not via allow-list)', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: 'feiafei@gmail.com', data: { emailConfig: {} } }),
+  tc('yating is a root teacher (not via allow-list)', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: 'yating8697@gmail.com', data: { emailConfig: {} } }),
+  tc('info@ is a root teacher (not via allow-list)', 'ALLOW',
+     { path: '/settings/private', method: 'get', mail: 'info@youtopiadanceacademy.com', data: { emailConfig: {} } }),
+  tc('root teacher with unverified email is still denied', 'DENY',
+     { path: '/settings/private', method: 'get', mail: 'anniechang0719@gmail.com', verified: false, data: { emailConfig: {} } }),
+  tc('a non-teacher gmail account is still denied', 'DENY',
+     { path: '/settings/private', method: 'get', mail: 'stranger@gmail.com', data: { emailConfig: {} } }),
+
   // ── make-up guard ────────────────────────────────────────────
   // Make-ups are auto-approved by design, so this must still work:
   tc('student CAN auto-approve a fresh make-up on own leave', 'ALLOW',

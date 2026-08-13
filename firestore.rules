@@ -18,11 +18,14 @@ service cloud.firestore {
 
     // Hard-coded so a bad settings write can never lock every teacher out,
     // and so teacher status can never be self-granted from the client.
+    // Keep in sync with TEACHER_EMAILS in src/config.js.
     function rootTeacher() {
       return email() in [
         'info@youtopiadanceacademy.com',
         'summerli634@gmail.com',
-        'yating8697@gmail.com'
+        'yating8697@gmail.com',
+        'anniechang0719@gmail.com',
+        'feiafei@gmail.com'
       ];
     }
 

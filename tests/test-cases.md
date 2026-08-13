@@ -212,22 +212,26 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 
 ---
 
-## TC-14 · Security: a teacher granted only via the allow-list can still sign in
+## TC-14 · Security: a teacher added from the UI can sign in
 
-**Requirement:** Teachers who are NOT hard-coded in `config.js` / the rules' root list — currently `anniechang0719@gmail.com` and `feiafei@gmail.com` — get their access from `settings/private.teacherEmails`. The Firestore rules resolve that list with `exists()` + `get()`, which cannot be exercised by the offline rules tests (the Rules API has no database access), so this path is only provable in production.
+**Requirement:** All five permanent teachers (`info@youtopiadanceacademy.com`, `summerli634@`, `yating8697@`, `anniechang0719@`, `feiafei@`) are hard-coded in both `src/config.js` and `rootTeacher()` in `firestore.rules`, so their access does not depend on any Firestore document. Anyone added later in Configuration → Teacher portal access is granted through `settings/private.teacherEmails`, which the rules resolve with `exists()` + `get()` — a path the offline rules tests cannot exercise, because the Rules API has no database access.
 
 **Steps:**
-1. Log in as `anniechang0719@gmail.com` (or `feiafei@gmail.com`) and choose Teacher.
-2. Open Configuration.
-3. Log in as a root teacher (`summerli634@gmail.com`) and confirm the same.
+1. Log in as any permanent teacher and open Configuration. (Covered by the
+   offline suite, but confirm the portal loads.)
+2. In Configuration → Teacher portal access, add a spare Google address you control.
+3. Log out, then log in with that address and choose Teacher.
+4. Remove it again afterwards.
 
 **Expected:**
-- The allow-listed teacher reaches the teacher portal, and Configuration shows the
-  full teacher list, the semester, and Email settings as "Connected".
-- If instead they are bounced to the student view, the rules could not read
-  `settings/private` — re-check that the document exists and holds `teacherEmails`.
-- Root teachers bypass the allow-list via the hard-coded list, so testing only
-  with them does **not** cover this case.
+- Every permanent teacher reaches the teacher portal; Configuration shows the
+  teacher list, semester, and Email settings as "Connected".
+- The newly added address also reaches the teacher portal — this is the only
+  proof that the `settings/private` allow-list lookup resolves in production.
+- If step 3 bounces to the student view, the rules could not read
+  `settings/private`; check the document exists and holds `teacherEmails`.
+- Permanent teachers show a `config.js` pill in the list and keep access even
+  if removed there — revoking one needs a code change and a deploy.
 
 ---
 
