@@ -1,10 +1,20 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { defineSecret } from 'firebase-functions/params'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
 initializeApp()
 
 const EMAILJS_URL = 'https://api.emailjs.com/api/v1.0/email/send'
+
+// EmailJS private key. Required whenever the account has strict mode on:
+// server-side calls without it are rejected with
+//   403 "API access in strict mode, but no Private Key was provided".
+// Kept in Secret Manager rather than Firestore so it never reaches a browser
+// — teachers' clients read settings/private, so storing it there would ship
+// the key to every teacher's machine.
+// Set it with:  firebase functions:secrets:set EMAILJS_PRIVATE_KEY
+const EMAILJS_PRIVATE_KEY = defineSecret('EMAILJS_PRIVATE_KEY')
 
 const PKG_LABELS = {
   full:    'Full semester',
@@ -13,6 +23,10 @@ const PKG_LABELS = {
 }
 
 async function sendEmail(cfg, { to, toName, subject, message }) {
+  // Only sent when the secret is populated, so the function still works on an
+  // account that does not use strict mode.
+  const privateKey = EMAILJS_PRIVATE_KEY.value()
+
   const res = await fetch(EMAILJS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -20,6 +34,7 @@ async function sendEmail(cfg, { to, toName, subject, message }) {
       service_id:  cfg.serviceId,
       template_id: cfg.templateId,
       user_id:     cfg.publicKey,
+      ...(privateKey ? { accessToken: privateKey } : {}),
       template_params: {
         to_email:  to,
         to_name:   toName || to,
@@ -232,6 +247,6 @@ async function buildAndSendSummary(db) {
 
 // Runs once daily at 9 AM Pacific and checks the configured schedule
 export const weeklyTeacherSummary = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles' },
+  { schedule: '0 9 * * *', timeZone: 'America/Los_Angeles', secrets: [EMAILJS_PRIVATE_KEY] },
   async (_event) => { await buildAndSendSummary(getFirestore()) }
 )
