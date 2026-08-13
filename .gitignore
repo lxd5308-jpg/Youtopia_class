@@ -3,3 +3,13 @@ dist
 dist[0-9]*
 .DS_Store
 *.local
+
+# Secrets — never commit. This repo is public.
+.env
+.env.*
+.cloudflare-token
+*.pem
+*.key
+firebase-debug.log
+firebase-debug.*.log
+.firebase/
