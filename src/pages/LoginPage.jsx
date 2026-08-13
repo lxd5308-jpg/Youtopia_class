@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { auth } from '../config/firebase'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
@@ -85,6 +85,39 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
   const [error, setError]     = useState('')
   const [showInAppOverlay, setShowInAppOverlay] = useState(false)
 
+  const loadingRef = useRef(false)
+  const settledRef = useRef(true)
+  useEffect(() => { loadingRef.current = loading }, [loading])
+
+  // ── Recover from an abandoned sign-in tab ──────────────────────
+  // On iOS Safari signInWithPopup opens a real tab, not a floating popup.
+  // If the user abandons it (closes it, hits back, or gets stranded on a
+  // Google error page) the popup promise never settles, leaving the button
+  // stuck on "Signing in…" forever. When the app regains focus with the
+  // sign-in still unsettled and nobody authenticated, reset so they can retry.
+  useEffect(() => {
+    let timer = null
+    function onReturn() {
+      if (document.visibilityState !== 'visible') return
+      if (!loadingRef.current || settledRef.current) return
+      clearTimeout(timer)
+      // Grace period: a successful popup can regain focus a moment before
+      // its promise resolves. Only declare failure if nothing lands.
+      timer = setTimeout(() => {
+        if (!loadingRef.current || settledRef.current || auth.currentUser) return
+        setLoading(false)
+        setError('Sign-in didn’t finish. Please try again.')
+      }, 2500)
+    }
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [])
+
   function checkTeacherAccess(email) {
     if (isApprovedTeacher(email)) return true
     return teacherEmails.map(e => e.toLowerCase()).includes((email||'').toLowerCase())
@@ -103,6 +136,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
       }
 
       const provider = new GoogleAuthProvider()
+      settledRef.current = false   // armed for the recovery effect above
       const result   = await signInWithPopup(auth, provider)
       const fbUser   = result.user
 
@@ -146,6 +180,7 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
         setError('Sign-in failed (' + (err.code || 'unknown') + '). Please try again.')
       }
     } finally {
+      settledRef.current = true
       setLoading(false)
     }
   }

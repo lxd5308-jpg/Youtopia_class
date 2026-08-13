@@ -30,6 +30,8 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **Use `signInWithPopup` everywhere — do not switch mobile to `signInWithRedirect`.** The app is served from Cloudflare while `authDomain` is `youtopia-3e141.firebaseapp.com`. Since firebase-js-sdk v9.15, `signInWithRedirect` needs cross-origin storage access to the auth domain, which iOS Safari blocks by default — the user completes Google sign-in and returns *not signed in*. Redirect only becomes an option if `/__/auth/*` is reverse-proxied onto the app's own domain and `authDomain` is repointed at it.
 
+- **Any flow that leaves the app must be able to recover when the user comes back.** On mobile `signInWithPopup` opens a real tab; if the user abandons it the promise never settles and the button stays disabled on "Signing in…" forever. Never leave a spinner as the only state — listen for `visibilitychange`/`focus` and reset with a retry message. Assume users will refresh, hit back, and abandon tabs; design for that rather than instructing them not to.
+
 - **Never trust a role or permission read back from `localStorage`.** `pendingLoginRole` survives the mobile post-login reload, but it is user-editable. Any code path that restores a session must re-run the teacher allow-list check (`verifyTeacherAccess`) before granting the teacher role — the check in `LoginPage` does not protect paths that bypass it.
 
 - **Run the teacher allow-list check before any early return in the login flow.** When adding a branch to `handleGoogleLogin`, place it either before sign-in entirely (e.g. the in-app-browser overlay) or after the teacher check. A branch that returns between sign-in and the check silently grants teacher access.

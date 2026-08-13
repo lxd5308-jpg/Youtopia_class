@@ -212,3 +212,20 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 **Expected:**
 - Step 2 clears `pendingLoginRole` immediately (verify it is gone in Application → Local Storage).
 - Step 3 logs in as a student normally — no forced sign-out, no teacher console.
+
+---
+
+## TC-14 · Abandoned sign-in tab does not lock the login button
+
+**Requirement:** If the user leaves or abandons the Google sign-in tab, the login page must recover instead of spinning forever.
+
+**Steps:**
+1. On mobile (or desktop), tap **Continue with Google**.
+2. When the Google tab opens, do NOT sign in — close that tab (or press back) and return to the app.
+3. Wait ~3 seconds.
+
+**Expected:**
+- The button stops showing "Signing in…" and becomes tappable again.
+- "Sign-in didn't finish. Please try again." is shown.
+- Tapping the button again starts a fresh sign-in that completes normally.
+- A *successful* sign-in is NOT interrupted by this recovery (verify a normal login still works end to end).
