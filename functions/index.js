@@ -170,6 +170,37 @@ async function buildAndSendSummary(db) {
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(p => (p.sessionsUsed || 0) >= 10 && isWithinWeek((p.sessionLog || []).slice(-1)[0]?.date))
 
+  const allEnrollments = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const allPacks       = packsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+  // ── Data checks ─────────────────────────────────────────────────────────
+  // This summary has twice reported "none this week" while the data was fine:
+  // once because a date format changed and every record failed to parse, once
+  // because the collection it reads was never written to. Both were invisible
+  // — an empty section looks identical to a quiet week. These checks make that
+  // class of drift announce itself instead.
+  const warnings = []
+
+  const unreadableDates = (label, rows, getDate) => {
+    const bad = rows.filter(r => { const v = getDate(r); return v && !parseAppDate(v) })
+    if (bad.length) {
+      warnings.push(`${bad.length} of ${rows.length} ${label} have unreadable dates (e.g. "${getDate(bad[0])}") and were left out of the counts below.`)
+    }
+  }
+  unreadableDates('leave requests', allLeaves, r => r.autoApprovedAt || r.submittedAt)
+  unreadableDates('make-up requests', allLeaves.filter(r => r.makeup), r => r.makeup.requestedAt)
+  unreadableDates('registrations', allEnrollments, e => e.enrolledAt)
+  unreadableDates('payments', allPayments, p => p.submittedAt)
+  unreadableDates('session packs', allPacks, p => (p.sessionLog || []).slice(-1)[0]?.date)
+
+  // A collection that is empty when the app should be filling it means a writer
+  // is broken, not that nothing happened.
+  if (allEnrollments.length === 0) {
+    warnings.push('The enrollments collection is empty. Registrations, the teacher Roster, the Dashboard student count and Messages recipient filtering all read it, so all four will look empty.')
+  }
+
+  warnings.forEach(w => console.warn(`DATA CHECK: ${w}`))
+
   // Build summary text
   const weekOf = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
 
@@ -233,6 +264,13 @@ async function buildAndSendSummary(db) {
       lines.push(`• ${p.studentName || 'Unknown'} — 10-session pack fully used`)
       lines.push(`  Hours used: ${p.sessionsUsed}/10  |  Last session: ${lastSession}`)
     })
+  }
+
+  // Only shown when something is actually wrong, so a healthy week reads exactly
+  // as before.
+  if (warnings.length) {
+    lines.push('', `DATA CHECKS (${warnings.length}) — please forward to whoever maintains the app`, '--------------------------------')
+    warnings.forEach(w => lines.push(`! ${w}`))
   }
 
   const message = lines.join('\n')

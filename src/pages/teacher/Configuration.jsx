@@ -862,6 +862,23 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
         </div>
       </div>
 
+      {/* ── Maintenance notes ───────────────────────────────── */}
+      <div className="card">
+        <div className="card-hdr"><span className="card-title">Maintenance notes</span></div>
+        <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-sm)',lineHeight:1.6}}>
+          Housekeeping items with an expiry date, recorded here so they are not forgotten. Nothing here needs action from teachers day to day.
+        </div>
+        <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',lineHeight:1.7}}>
+          <div><strong>Cloud Function image retention — review by 20 Dec 2026</strong></div>
+          <div>
+            Old copies of the summary-email function are kept for <strong>130 days</strong> (set 13 Aug 2026, covering this semester)
+            so a broken deploy can be rolled back. They are build files only — no class, student or payment data.
+            At semester end, either extend the window or let it lapse:
+            <code style={{fontSize:'var(--fs-xs)'}}> firebase functions:artifacts:setpolicy --days N</code>
+          </div>
+        </div>
+      </div>
+
       {/* ── Schedule upload ─────────────────────────────────── */}
       <div className="card">
         <div className="card-hdr">

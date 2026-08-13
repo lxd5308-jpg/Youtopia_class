@@ -454,8 +454,13 @@ export default function App() {
     // Roster, the Dashboard student count, Messages recipient filtering and
     // the weekly summary all read. Before this, auto-enrolment wrote none of
     // them and every one of those screens was empty.
+    // Fee and deposit line items ("Registration Fee", "Team 2 Deposit") live in
+    // the same class list but have no schedule. They are payments, not
+    // enrolments, and must not show up on the Roster.
+    const isRealClass = !!(String(cls.days || '').trim() || String(cls.time || '').trim())
+
     const email = studentEmailRef.current
-    if (email) {
+    if (email && isRealClass) {
       const enrollId = `${encEmail(email)}_${cls.id}`
       setDoc(doc(db, 'enrollments', enrollId), {
         classId:      cls.id,

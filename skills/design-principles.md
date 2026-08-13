@@ -46,6 +46,12 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **Server-side code is not shipped by the frontend deploy.** `npm run build` + Cloudflare only publishes [src/](../src/). Anything in [functions/](../functions/) needs a separate `firebase deploy --only functions` (Blaze plan required). A committed Cloud Function is not a running Cloud Function — verify with `firebase functions:list`.
 
+- **Silent zeros are the dangerous failure.** The weekly summary reported "none this week" twice while the data was fine — once when a date format gained " at " and every record failed to parse, once when the collection it reads was never written to. An empty section is indistinguishable from a quiet week, so the Cloud Function now runs data checks (unparseable dates, empty-but-expected collections) and appends a DATA CHECKS block to the email only when something is wrong. When a reader can legitimately return nothing, make "nothing" and "broken" look different.
+
+- **When you change what the app writes, find every reader.** Both summary bugs came from a change whose downstream consumers were missed: a new date format, and auto-enrolment that stopped writing `enrollments` — which the Roster, the Dashboard student count and Messages recipient filtering also read. Grep for the collection or field name before shipping a format or flow change.
+
+- **Fee and deposit line items are not classes.** "Registration Fee" and "Team 2 Deposit" live in the same class list but have empty `days`/`time`/`duration` and `sessions: 1`. Anything that treats the class list as enrolments (Roster, enrollment records) must filter them out with `days || time`.
+
 ---
 
 ## Cross-platform
