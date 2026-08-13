@@ -868,6 +868,18 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
         <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-sm)',lineHeight:1.6}}>
           Housekeeping items with an expiry date, recorded here so they are not forgotten. Nothing here needs action from teachers day to day.
         </div>
+        <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',lineHeight:1.7,marginBottom:'var(--sp-sm)'}}>
+          <div><strong>Database backups — no action needed</strong></div>
+          <div>
+            Point-in-time recovery keeps a rolling <strong>7 days</strong>, and snapshots run
+            <strong> daily (kept 7 days)</strong> and <strong>weekly on Sunday (kept 14 weeks)</strong>.
+            Deletion of the database itself is blocked. Restoring always creates a
+            new database rather than overwriting the live one.
+            For a copy held outside Google, run
+            <code style={{fontSize:'var(--fs-xs)'}}> node scripts/backup-local.mjs</code>
+            — it writes a dated JSON file and contains student data, so keep it private.
+          </div>
+        </div>
         <div style={{background:'var(--color-background-secondary)',borderRadius:'var(--r-sm)',padding:'var(--sp-sm) var(--sp-md)',fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',lineHeight:1.7}}>
           <div><strong>Cloud Function image retention — review by 20 Dec 2026</strong></div>
           <div>

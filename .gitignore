@@ -13,3 +13,6 @@ dist[0-9]*
 firebase-debug.log
 firebase-debug.*.log
 .firebase/
+
+# Local Firestore dumps — contain student PII and receipt images
+backups/
