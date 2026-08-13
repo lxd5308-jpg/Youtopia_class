@@ -1,0 +1,123 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHASE 2 — ownership rules.
+//
+// Ships together with the App.jsx change that stops students subscribing to
+// whole collections; deploying this without that change breaks student pages.
+//
+// No `match /{document=**}` catch-all: rules are permissive-OR, so a
+// catch-all would silently re-grant everything. Unlisted paths are denied.
+// ─────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function email()    { return request.auth.token.email.lower(); }
+
+    // Hard-coded so a bad settings write can never lock every teacher out,
+    // and so teacher status can never be self-granted from the client.
+    function rootTeacher() {
+      return email() in [
+        'info@youtopiadanceacademy.com',
+        'summerli634@gmail.com',
+        'yating8697@gmail.com'
+      ];
+    }
+
+    // email_verified matters: without it, someone could register an
+    // email/password account claiming a teacher's address and inherit access.
+    function isTeacher() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && (
+          rootTeacher()
+          || email() in get(/databases/$(database)/documents/settings/main).data.teacherEmails
+        );
+    }
+
+    // students/{id} is keyed by encodeURIComponent(email), so for a normal
+    // address the only escaped character is '@' -> '%40'. Addresses with '+'
+    // (or other escapable characters) will not match; storing an `email`
+    // field on the doc and comparing that is the robust follow-up.
+    function ownStudentDoc(id) {
+      let parts = email().split('@');
+      return signedIn() && parts.size() == 2 && id.lower() == parts[0] + '%40' + parts[1];
+    }
+
+    function owns()    { return signedIn() && resource.data.studentEmail.lower() == email(); }
+    function willOwn() { return signedIn() && request.resource.data.studentEmail.lower() == email(); }
+
+    // ── Shared configuration ────────────────────────────────────────────
+    // Class list and semester dates: every signed-in user reads them.
+    // Teacher-only write is what closes the escalation path.
+    match /settings/main {
+      allow read:  if signedIn();
+      allow write: if isTeacher();
+    }
+    match /settings/{other} {
+      allow read, write: if isTeacher();
+    }
+
+    // ── Per-student profile ─────────────────────────────────────────────
+    match /students/{sid} {
+      allow read, write: if isTeacher() || ownStudentDoc(sid);
+    }
+
+    // ── Student-submitted records ───────────────────────────────────────
+    // Students may create their own and read their own. Status decisions
+    // (confirm / reject / resolve) stay teacher-only — a student must never
+    // be able to mark their own payment confirmed.
+    match /payments/{id} {
+      allow read:           if isTeacher() || owns();
+      allow create:         if isTeacher() || willOwn();
+      allow update, delete: if isTeacher();
+    }
+
+    match /leaveRequests/{id} {
+      allow read:   if isTeacher() || owns();
+      allow create: if isTeacher() || willOwn();
+      // A student may amend their own request (adding a make-up) but cannot
+      // reassign it to someone else.
+      allow update: if isTeacher() || (owns() && willOwn());
+      allow delete: if isTeacher();
+    }
+
+    // Enrollment docs are created by the student sign-up flow and re-written
+    // with merge:true if they enrol in the same class again.
+    match /enrollments/{id} {
+      allow read:   if isTeacher() || owns();
+      allow create: if isTeacher() || willOwn();
+      allow update: if isTeacher() || (owns() && willOwn());
+      allow delete: if isTeacher();
+    }
+
+    // Created by the student sign-up flow; session logging is a teacher action.
+    match /sessionPacks/{id} {
+      allow read:           if isTeacher() || owns();
+      allow create:         if isTeacher() || willOwn();
+      allow update, delete: if isTeacher();
+    }
+
+    // Teacher-side ledger. No student page reads it (students get their
+    // history from their own students/{id} doc) and the existing documents
+    // carry no studentEmail, so this is teacher-only.
+    match /paymentHistory/{id} {
+      allow read, write: if isTeacher();
+    }
+
+    // ── Messaging ───────────────────────────────────────────────────────
+    match /studentInbox/{id} {
+      allow read:   if isTeacher() || owns();
+      allow create: if isTeacher() || willOwn();
+      allow update: if isTeacher() || (owns() && willOwn());
+      allow delete: if isTeacher();
+    }
+
+    match /teacherMessages/{id} {
+      allow read:  if isTeacher() || owns();
+      allow write: if isTeacher();
+    }
+  }
+}

@@ -159,6 +159,55 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 
 ---
 
+## TC-11 · Security: a student cannot see another student's data
+
+**Requirement:** A signed-in student may read only their own records. Payment receipts, leave requests and profiles belonging to other students must be unreachable — from the UI and from the Firestore API directly.
+
+**Steps:**
+1. Log in as a student. Open the browser devtools console.
+2. Confirm the Dashboard and Hub show that student's own pending payments.
+3. In the console, attempt a direct read of another student's document, e.g.
+   `getDoc(doc(db,'students','someoneelse%40example.com'))`.
+
+**Expected:**
+- Own payments and classes render exactly as before.
+- The direct read of another student's document fails with `permission-denied`.
+- The network tab shows the student subscribing only to `settings/main` and a
+  `payments` query filtered by their own `studentEmail` — not whole collections.
+
+---
+
+## TC-12 · Security: a student cannot grant themselves teacher access
+
+**Requirement:** `settings/main` is writable by teachers only. This is the document holding `teacherEmails`, which `verifyTeacherAccess` consults, so a student write here would be a full privilege escalation.
+
+**Steps:**
+1. Log in as a student. In the console, attempt
+   `setDoc(doc(db,'settings','main'),{teacherEmails:['me@example.com']},{merge:true})`.
+2. Attempt the same as a teacher.
+
+**Expected:**
+- The student write fails with `permission-denied`; the teacher write succeeds.
+- Reading `settings/main` still works as a student (the class list and semester
+  dates come from it and every student page needs them).
+
+---
+
+## TC-13 · Security: a student cannot confirm their own payment
+
+**Requirement:** Payment status decisions are teacher-only. A student may create a payment but never update one.
+
+**Steps:**
+1. Log in as a student and submit a package purchase.
+2. In the console, attempt to update that payment document, setting `status` to `confirmed`.
+
+**Expected:**
+- Creation succeeds and the payment appears as Pending.
+- The status update fails with `permission-denied`.
+- A teacher confirming the same payment from the Payments page succeeds.
+
+---
+
 ## TC-06 · Teacher: view receipt after decision
 
 **Requirement:** After a teacher confirms or rejects a payment, they can still view the uploaded receipt image.

@@ -20,6 +20,20 @@ When the user requests a fix or correction, extract the general principle behind
 
 ---
 
+## Security
+
+- **Firestore rules are the only real access control — client checks are decoration.** `verifyTeacherAccess`, role flags and hidden UI all run in the user's browser and can be bypassed by talking to Firestore directly (the API key and project ID ship in the public bundle). Any rule of the form `allow read, write: if request.auth != null` means "every signed-in account owns the whole database". Rules live in [firestore.rules](../firestore.rules) and deploy with `firebase deploy --only firestore:rules` — no Blaze plan needed.
+
+- **Never let the client write the document that grants permissions.** `settings/main.teacherEmails` decides who is a teacher, so it must be teacher-writable only, and the rules keep a hard-coded root teacher list so a bad write can never lock everyone out. Any "who is an admin" data must be unwritable by the people it would promote.
+
+- **A `match /{document=**}` catch-all silently defeats every specific rule above it.** Rules are permissive-OR: if any match grants access, access is granted. Enumerate collections explicitly and let unlisted paths fall through to denied.
+
+- **Never subscribe a client to a collection it only needs one row of.** Students used to load every payment, receipt and leave request and filter in the browser — everyone's data, in everyone's browser. Scope the query (`where('studentEmail','==',email)`) so the server sends only what that user may see; the rules then enforce the same boundary.
+
+- **Verify rules before deploying them.** The Rules API evaluates a test suite server-side without deploying (`POST firebaserules.googleapis.com/v1/projects/<id>:test`), which works without Java or the emulator. Note it URL-decodes request paths once, so a document ID containing a literal `%40` must be written `%2540` in a test.
+
+---
+
 ## State & Backend
 
 - **Never record success state unless something actually succeeded.** Fields like `summaryLastSent` are written only when at least one send returned OK. Writing them unconditionally turns a total failure into a UI that reports success and suppresses the retry — the worst kind of bug, because nobody notices it. Guard every "last done at" write with the result of the operation, and log loudly on total failure.
