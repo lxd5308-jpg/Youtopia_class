@@ -137,3 +137,78 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 - The receipt image expands inline below the payment row.
 - Clicking Hide (or Receipt again) collapses it.
 - The button is not shown if no receipt was uploaded.
+
+---
+
+## TC-09 · Mobile login: unauthorised account cannot get teacher access
+
+**Requirement:** The teacher allow-list check must run on every login path, including mobile, before the teacher role is granted.
+
+**Steps:**
+1. On a mobile browser (or desktop DevTools device emulation with an iPhone/Android user agent), open the login page.
+2. Select **Teacher**.
+3. Sign in with a Google account that is NOT in `TEACHER_EMAILS` (src/config.js) and NOT in `settings/main.teacherEmails`.
+
+**Expected:**
+- Sign-in is rejected with "This account is not registered as a teacher…".
+- The account is signed out; the app stays on the login page.
+- `localStorage.pendingLoginRole` is NOT set, and the page does NOT reload into the teacher console.
+
+---
+
+## TC-10 · Mobile login: approved teacher signs in successfully
+
+**Requirement:** An approved teacher can still log in on mobile after the popup reload workaround.
+
+**Steps:**
+1. On a mobile browser, select **Teacher** and sign in with an approved teacher account.
+2. Allow the page to reload.
+
+**Expected:**
+- Google sign-in uses a popup (not a full-page redirect away from the app).
+- After the automatic reload, the teacher console is shown, still signed in.
+- `localStorage.pendingLoginRole` is cleared after restore.
+
+---
+
+## TC-11 · Tampered pendingLoginRole is rejected
+
+**Requirement:** The role restored after the mobile reload must be re-verified, not trusted from localStorage.
+
+**Steps:**
+1. Log in as a **student** on any browser.
+2. In DevTools console, run `localStorage.setItem('pendingLoginRole','teacher')`.
+3. Reload the page.
+
+**Expected:**
+- The student is NOT restored into the teacher console.
+- The session is signed out and the login page is shown.
+
+---
+
+## TC-12 · In-app browser shows "open in browser" overlay immediately
+
+**Requirement:** WeChat and other in-app browsers show the instruction overlay without attempting a sign-in.
+
+**Steps:**
+1. Open the app with a user agent containing `MicroMessenger` (or Instagram/FBAV).
+2. Tap **Continue with Google**.
+
+**Expected:**
+- The overlay appears immediately; no Google popup is attempted and no error flashes first.
+- Overlay renders without horizontal overflow at 320px width.
+
+---
+
+## TC-13 · Stale pendingLoginRole does not hijack a later login
+
+**Requirement:** A `pendingLoginRole` left over from an abandoned or failed sign-in must be discarded, not applied to the next login.
+
+**Steps:**
+1. With no user signed in, run `localStorage.setItem('pendingLoginRole','teacher')` in DevTools.
+2. Reload the page (login page should appear).
+3. Now log in normally as a **student**.
+
+**Expected:**
+- Step 2 clears `pendingLoginRole` immediately (verify it is gone in Application → Local Storage).
+- Step 3 logs in as a student normally — no forced sign-out, no teacher console.

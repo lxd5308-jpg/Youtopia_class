@@ -28,7 +28,11 @@ When the user requests a fix or correction, extract the general principle behind
 
 ## Auth & Login
 
-- **Use `signInWithRedirect` on mobile, `signInWithPopup` on desktop.** Google OAuth via popup is blocked in WebViews and some mobile browsers. Always check `isMobile()` and branch accordingly.
+- **Use `signInWithPopup` everywhere — do not switch mobile to `signInWithRedirect`.** The app is served from Cloudflare while `authDomain` is `youtopia-3e141.firebaseapp.com`. Since firebase-js-sdk v9.15, `signInWithRedirect` needs cross-origin storage access to the auth domain, which iOS Safari blocks by default — the user completes Google sign-in and returns *not signed in*. Redirect only becomes an option if `/__/auth/*` is reverse-proxied onto the app's own domain and `authDomain` is repointed at it.
+
+- **Never trust a role or permission read back from `localStorage`.** `pendingLoginRole` survives the mobile post-login reload, but it is user-editable. Any code path that restores a session must re-run the teacher allow-list check (`verifyTeacherAccess`) before granting the teacher role — the check in `LoginPage` does not protect paths that bypass it.
+
+- **Run the teacher allow-list check before any early return in the login flow.** When adding a branch to `handleGoogleLogin`, place it either before sign-in entirely (e.g. the in-app-browser overlay) or after the teacher check. A branch that returns between sign-in and the check silently grants teacher access.
 
 - **WeChat in-app browser cannot do Google OAuth at all.** Detect `MicroMessenger` in the user agent and show a clear "Open in Browser" instruction instead of a broken sign-in attempt. Disable the sign-in button in that context.
 

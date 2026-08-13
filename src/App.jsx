@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage'
 import AppShell from './components/AppShell'
 import { CLASSES, SEMESTER } from './data/mockData'
 import { sendEmailToMany, isEmailConfigured } from './utils/emailService'
+import { verifyTeacherAccess } from './utils/teacherAccess'
 
 const applyFn  = (v, prev) => typeof v === 'function' ? v(prev) : v
 const nowStr   = () => new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -62,10 +63,21 @@ export default function App() {
     const savedRole = localStorage.getItem('pendingLoginRole')
     if (!savedRole) return  // no pending restore
 
-    const unsub = onAuthStateChanged(auth, (fbUser) => {
-      if (!fbUser) return
+    // Only the FIRST auth state emission counts as the post-reload restore.
+    // If it resolves to no user, the saved role is stale (e.g. an abandoned or
+    // failed sign-in) — clear it so it can't hijack a later, unrelated login.
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
       unsub()
       localStorage.removeItem('pendingLoginRole')
+      if (!fbUser) return
+
+      // pendingLoginRole comes from localStorage, so never trust it for the
+      // teacher role — re-verify against the allow-list before restoring.
+      if (savedRole === 'teacher' && !(await verifyTeacherAccess(fbUser.email, td.teacherEmails))) {
+        signOut(auth).catch(() => {})
+        return
+      }
+
       const initials = fbUser.displayName
         ? fbUser.displayName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()
         : fbUser.email.slice(0,2).toUpperCase()

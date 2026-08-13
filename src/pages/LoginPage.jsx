@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { auth, db } from '../config/firebase'
+import { auth } from '../config/firebase'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
 
 function isMobile() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 }
 import { isApprovedTeacher } from '../config'
+import { verifyTeacherAccess } from '../utils/teacherAccess'
 import styles from './LoginPage.module.css'
 
 function isWeChat() {
@@ -94,33 +94,26 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
     setLoading(true)
     setError('')
     try {
+      // In-app browsers (WeChat, Instagram, …) can't complete Google sign-in
+      // at all, so show the "open in browser" overlay before even trying.
+      if (isWeChat() || isInAppBrowser()) {
+        setShowInAppOverlay(true)
+        setLoading(false)
+        return
+      }
+
       const provider = new GoogleAuthProvider()
       const result   = await signInWithPopup(auth, provider)
       const fbUser   = result.user
 
-      if (role === 'teacher') {
-        // Re-fetch teacher emails now that the user is authenticated so the
-        // check uses the current Firestore list, not the stale in-memory one.
-        let currentEmails = teacherEmails
-        try {
-          const snap = await getDoc(doc(db, 'settings', 'main'))
-          if (snap.exists() && snap.data().teacherEmails?.length) {
-            currentEmails = snap.data().teacherEmails
-          }
-        } catch {}
-
-        const allowed = isApprovedTeacher(fbUser.email) ||
-          currentEmails.map(e => e.toLowerCase()).includes((fbUser.email||'').toLowerCase())
-
-        if (!allowed) {
-          await auth.signOut()
-          setError(
-            'This account is not registered as a teacher. ' +
-            'Please sign in as a Student, or contact the academy admin to request teacher access.'
-          )
-          setLoading(false)
-          return
-        }
+      if (role === 'teacher' && !(await verifyTeacherAccess(fbUser.email, teacherEmails))) {
+        await auth.signOut()
+        setError(
+          'This account is not registered as a teacher. ' +
+          'Please sign in as a Student, or contact the academy admin to request teacher access.'
+        )
+        setLoading(false)
+        return
       }
 
       const initials = fbUser.displayName
@@ -128,7 +121,8 @@ export default function LoginPage({ onLogin, teacherEmails=[] }) {
         : fbUser.email.slice(0, 2).toUpperCase()
 
       if (isMobile()) {
-        // Reload to clear any ghost overlay left by the Google popup
+        // Reload to clear any ghost overlay left by the Google popup.
+        // Role is only stored AFTER the teacher check above has passed.
         localStorage.setItem('pendingLoginRole', role)
         window.location.reload()
         return
