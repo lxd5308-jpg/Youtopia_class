@@ -68,6 +68,8 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **All UI must work on mobile and desktop.** Every layout change must be reasoned through at both ≥ 320px mobile width and full desktop width before being marked complete. See the Cross-platform requirement in CLAUDE.md.
 
+- **`flexWrap: 'wrap'` is for content that must fit the viewport — not for a button group inside a `<td>` that already lives in a horizontally-scrolling table.** A table wrapped in `overflowX:'auto'` (the pattern used by every data table in this app — Roster, Attendance, Payments) is designed to be scrolled sideways on mobile, and its columns already assume `whiteSpace:'nowrap'`. Applying `flexWrap:'wrap'` to a multi-button action cell inside one of these tables doesn't make it fit — the column just gets squeezed to one button's width and every other button drops to its own line, turning a short row into a very tall one. Inside a table that already scrolls horizontally, action buttons should stay `flexWrap:'nowrap'` and let the table scroll further right, exactly like the other columns. Reserve `flexWrap:'wrap'` for containers that are meant to reflow within the current viewport width (forms, modals, card layouts) — not for cells inside an intentionally-overflowing table.
+
 ---
 
 ## Auth & Login

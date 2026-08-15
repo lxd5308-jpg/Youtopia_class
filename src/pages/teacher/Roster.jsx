@@ -190,17 +190,17 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
                           : <span style={{color:'var(--color-text-secondary)'}}>—</span>
                         }
                       </td>
-                      <td style={{padding:'9px 10px'}}>
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <td style={{padding:'9px 10px',whiteSpace:'nowrap'}}>
+                        <div style={{display:'flex',gap:6,flexWrap:'nowrap'}}>
                           {hasDetail && (
-                            <button className="btn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)'}} onClick={() => toggleExpanded(r.key)}>
+                            <button className="btn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)',flexShrink:0}} onClick={() => toggleExpanded(r.key)}>
                               <i className={`ti ti-${isExpanded ? 'chevron-up' : 'chevron-down'}`} /> Detail
                             </button>
                           )}
-                          <button className="btn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)'}} onClick={() => openSwitch(r)}>
+                          <button className="btn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)',flexShrink:0}} onClick={() => openSwitch(r)}>
                             <i className="ti ti-transfer" /> Switch
                           </button>
-                          <button className="btn btn-warn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)'}} onClick={() => openDrop(r)}>
+                          <button className="btn btn-warn" style={{padding:'4px 10px',fontSize:'var(--fs-xs)',flexShrink:0}} onClick={() => openDrop(r)}>
                             <i className="ti ti-user-minus" /> Drop
                           </button>
                         </div>
