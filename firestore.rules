@@ -130,6 +130,13 @@ service cloud.firestore {
       allow read, write: if isTeacher();
     }
 
+    // Switch/drop audit trail, written only by the teacher-initiated
+    // switchStudentClass/dropStudentClass actions — never by a student
+    // directly — so this is teacher-only like paymentHistory.
+    match /classChangeLog/{id} {
+      allow read, write: if isTeacher();
+    }
+
     // ── Messaging ───────────────────────────────────────────────────────
     match /studentInbox/{id} {
       allow read:   if isTeacher() || owns();

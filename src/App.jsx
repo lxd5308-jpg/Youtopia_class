@@ -31,7 +31,6 @@ const defaultStudent = () => ({
   enrolledSemesterName: '',
   enrolledSemesterEnd:  '',
   enrollmentHistory:    [],
-  classChangeLog:       [],
 })
 
 const defaultTeacher = () => ({
@@ -42,6 +41,7 @@ const defaultTeacher = () => ({
   enrollments:    [],
   sessionPacks:   [],
   paymentHistory: [],
+  classChangeLog: [],
   sentMessages:   [],
   studentInbox:   [],
   emailConfig:      { serviceId:'', templateId:'', publicKey:'' },
@@ -194,6 +194,11 @@ export default function App() {
         const hist = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         setTd(prev => ({ ...prev, paymentHistory: hist }))
       }))
+
+      teacherUnsubs.push(onSnapshot(collection(db, 'classChangeLog'), snap => {
+        const log = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        setTd(prev => ({ ...prev, classChangeLog: log }))
+      }))
     }
 
     globalUnsubRef.current = () => {
@@ -278,7 +283,6 @@ export default function App() {
           enrolledSemesterName: data.enrolledSemesterName ?? prev.enrolledSemesterName,
           enrolledSemesterEnd:  data.enrolledSemesterEnd  ?? prev.enrolledSemesterEnd,
           enrollmentHistory:    data.enrollmentHistory    ?? prev.enrollmentHistory,
-          classChangeLog:       data.classChangeLog       ?? prev.classChangeLog,
         }))
       }
       // Mark profile as loaded (whether doc exists or not)
@@ -545,7 +549,7 @@ export default function App() {
     // Add enrollment records (unique ID prevents duplicates)
     for (const item of classItems) {
       const enrollId = `${encoded}_${item.classId}`
-      const clsObj   = td.classes.find(c => c.id === item.classId)
+      const clsObj   = td.classes.find(c => String(c.id) === String(item.classId))
       await setDoc(doc(db, 'enrollments', enrollId), {
         classId:      item.classId,
         className:    item.className,
@@ -582,29 +586,31 @@ export default function App() {
     const snap        = await getDoc(studentRef)
     const existing    = snap.exists() ? snap.data() : defaultStudent()
 
-    const fromClass   = td.classes.find(c => c.id === fromClassId)
-    const toClass     = td.classes.find(c => c.id === toClassId)
+    const fromClass   = td.classes.find(c => String(c.id) === String(fromClassId))
+    const toClass     = td.classes.find(c => String(c.id) === String(toClassId))
     const oldEnrollId = `${encoded}_${fromClassId}`
     const oldSnap     = await getDoc(doc(db, 'enrollments', oldEnrollId))
     const pkgType     = oldSnap.exists() ? (oldSnap.data().pkgType || 'full') : 'full'
 
-    const newEnrolled = [...new Set([...(existing.enrolled||[]).filter(id => id !== fromClassId), toClassId])]
-    const newPending  = (existing.pendingEnroll||[]).filter(id => id !== fromClassId)
-    const logEntry    = {
+    const newEnrolled = [...new Set([...(existing.enrolled||[]).filter(id => String(id) !== String(fromClassId)), toClassId])]
+    const newPending  = (existing.pendingEnroll||[]).filter(id => String(id) !== String(fromClassId))
+
+    await setDoc(studentRef, { enrolled: newEnrolled, pendingEnroll: newPending }, { merge: true })
+
+    if (studentEmailRef.current === studentEmail) {
+      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending }))
+    }
+
+    // Audit trail lives in its own collection (like enrollments/leaveRequests)
+    // rather than on the student doc, so the Roster can subscribe to every
+    // student's history at once instead of one doc per student.
+    await addDoc(collection(db, 'classChangeLog'), {
+      studentEmail, studentName: existing.studentName || studentName || '',
       type: 'switch',
       fromClassId, fromClassName: fromClass?.name || '',
       toClassId,   toClassName:   toClass?.name || '',
       date: nowStr(), note: note.trim(),
-    }
-    const newLog = [...(existing.classChangeLog||[]), logEntry]
-
-    await setDoc(studentRef, {
-      enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog,
-    }, { merge: true })
-
-    if (studentEmailRef.current === studentEmail) {
-      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog }))
-    }
+    })
 
     await deleteDoc(doc(db, 'enrollments', oldEnrollId))
     await setDoc(doc(db, 'enrollments', `${encoded}_${toClassId}`), {
@@ -626,22 +632,21 @@ export default function App() {
     const snap       = await getDoc(studentRef)
     const existing   = snap.exists() ? snap.data() : defaultStudent()
 
-    const cls        = td.classes.find(c => c.id === classId)
-    const newEnrolled = (existing.enrolled||[]).filter(id => id !== classId)
-    const newPending  = (existing.pendingEnroll||[]).filter(id => id !== classId)
-    const logEntry    = {
-      type: 'drop', fromClassId: classId, fromClassName: cls?.name || '',
-      date: nowStr(), note: note.trim(),
-    }
-    const newLog = [...(existing.classChangeLog||[]), logEntry]
+    const cls        = td.classes.find(c => String(c.id) === String(classId))
+    const newEnrolled = (existing.enrolled||[]).filter(id => String(id) !== String(classId))
+    const newPending  = (existing.pendingEnroll||[]).filter(id => String(id) !== String(classId))
 
-    await setDoc(studentRef, {
-      enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog,
-    }, { merge: true })
+    await setDoc(studentRef, { enrolled: newEnrolled, pendingEnroll: newPending }, { merge: true })
 
     if (studentEmailRef.current === studentEmail) {
-      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog }))
+      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending }))
     }
+
+    await addDoc(collection(db, 'classChangeLog'), {
+      studentEmail, studentName: existing.studentName || studentName || '',
+      type: 'drop', fromClassId: classId, fromClassName: cls?.name || '',
+      date: nowStr(), note: note.trim(),
+    })
 
     await deleteDoc(doc(db, 'enrollments', `${encoded}_${classId}`))
   }
@@ -1085,6 +1090,7 @@ export default function App() {
       pendingPayments={td.pendingPayments}   setPendingPayments={setPendingPayments}
       teacherLeaves={td.leaveRequests}       setTeacherLeaves={setTeacherLeaves}
       enrollments={td.enrollments}
+      classChangeLog={td.classChangeLog}
       switchStudentClass={switchStudentClass}
       dropStudentClass={dropStudentClass}
       teacherSessionPacks={td.sessionPacks}

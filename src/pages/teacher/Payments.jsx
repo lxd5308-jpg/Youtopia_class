@@ -17,23 +17,31 @@ export default function TeacherPayments({
 }) {
   const [payTab,        setPayTab]        = useState('pending')
   const [payExpandedId, setPayExpandedId] = useState(null)
-  const [payAction,     setPayAction]     = useState({})  // { [id]: 'confirm'|'reject' }
+  const [payAction,     setPayAction]     = useState({})  // { [id]: 'confirm'|'reject'|'refund' }
   const [payNotes,      setPayNotes]      = useState({})
+  const [refundAmounts, setRefundAmounts] = useState({})  // { [id]: string } — editable, defaults to payment.total
+  const [confirmAdjustments, setConfirmAdjustments] = useState({})  // { [id]: string } — signed delta added to payment.total, defaults to 0
   const [payFlash,      setPayFlash]      = useState({})
 
   const pending   = (pendingPayments || []).filter(p => p.status === 'pending')
   const confirmed = (pendingPayments || []).filter(p => p.status === 'confirmed')
   const rejected  = (pendingPayments || []).filter(p => p.status === 'rejected')
+  const refunded  = (pendingPayments || []).filter(p => p.status === 'refunded')
 
   const tabs = [
     { v:'pending',   label:`Pending (${pending.length})`     },
     { v:'confirmed', label:`Confirmed (${confirmed.length})` },
     { v:'rejected',  label:`Rejected (${rejected.length})`   },
+    { v:'refunded',  label:`Refunded (${refunded.length})`   },
   ]
-  const displayed = payTab === 'pending' ? pending : payTab === 'confirmed' ? confirmed : rejected
+  const displayed = { pending, confirmed, rejected, refunded }[payTab] || pending
 
   const totalRevenue   = confirmed.reduce((s, p) => s + p.total, 0)
   const pendingRevenue = pending.reduce((s, p) => s + p.total, 0)
+  // A refund does not undo the original payment record — it moves the
+  // payment to its own status with the actual amount returned, so a partial
+  // refund still shows what was kept rather than zeroing the whole payment.
+  const refundedTotal  = refunded.reduce((s, p) => s + (p.refundAmount ?? p.total), 0)
 
   function exportPaymentsCSV() {
     const all = (pendingPayments || [])
@@ -42,14 +50,22 @@ export default function TeacherPayments({
       email:      p.studentEmail || '',
       items:      (p.items||[]).map(i=>`${i.className} (${PKG_LABEL[i.pkgType]||i.pkgType})`).join('; '),
       method:     p.method,
+      subtotal:   p.subtotal ?? '',
+      adjustment: p.adjustment ?? '',
       total:      p.total,
       status:     p.status,
-      submitted:  p.submittedAt || '',
-      confirmed:  p.confirmedAt || '',
-      rejected:   p.rejectedAt  || '',
-      rejectNote: p.rejectNote  || '',
+      submitted:      p.submittedAt || '',
+      confirmed:      p.confirmedAt || '',
+      originalTotal:      p.originalTotal ?? '',
+      confirmAdjustment:  p.confirmAdjustment ?? '',
+      confirmNote:        p.confirmNote   || '',
+      rejected:       p.rejectedAt  || '',
+      rejectNote:     p.rejectNote  || '',
+      refunded:       p.refundedAt  || '',
+      refundAmount:   p.refundAmount ?? '',
+      refundNote:     p.refundNote  || '',
     }))
-    const headers = ['Student','Email','Items','Method','Total ($)','Status','Submitted','Confirmed','Rejected','Reject Note']
+    const headers = ['Student','Email','Items','Method','Subtotal ($)','Order Adjustment ($)','Total ($)','Status','Submitted','Confirmed','Submitted Total ($)','Confirm Adjustment ($)','Confirm Adjustment Note','Rejected','Reject Note','Refunded','Refund Amount ($)','Refund Note']
     const csvRows = [headers, ...rows.map(r => Object.values(r))]
     const csv = csvRows.map(r => r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], {type:'text/csv'})
@@ -66,22 +82,52 @@ export default function TeacherPayments({
   function cancelPayAction(id) {
     setPayAction(a => { const n={...a}; delete n[id]; return n })
     setPayNotes(n  => { const m={...n}; delete m[id]; return m })
+    setRefundAmounts(a => { const n={...a}; delete n[id]; return n })
+    setConfirmAdjustments(a => { const n={...a}; delete n[id]; return n })
     setPayExpandedId(null)
   }
   function confirmPayAction(payment) {
     const act = payAction[payment.id]
     if (act === 'confirm') {
+      // A signed delta, not a replacement amount — the submitted total stays
+      // on the record as originalTotal, so a teacher-offered discount or a
+      // credit the student didn't enter themselves is visible as an
+      // adjustment on top of it, not an overwritten number. For the common
+      // single-item payment, the item's own price is kept in sync so
+      // Roster/CSV — which read item price, not the payment total — stay
+      // consistent.
+      const delta    = Number(confirmAdjustments[payment.id]) || 0
+      const adjusted = delta !== 0
+      const amt      = Math.max(0, payment.total + delta)
+      const items    = adjusted && payment.items.length === 1
+        ? [{ ...payment.items[0], price: Math.max(0, (payment.items[0].price || 0) + delta) }]
+        : payment.items
       setPendingPayments(ps => ps.map(p =>
-        p.id === payment.id ? { ...p, status:'confirmed',
+        p.id === payment.id ? { ...p, status:'confirmed', items, total: amt,
           confirmedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }),
+          ...(adjusted ? { originalTotal: p.total, confirmAdjustment: delta, confirmNote: payNotes[payment.id] || '' } : {}),
         } : p
       ))
-      enrollStudent(payment.items, { name: payment.studentName, email: payment.studentEmail })
+      // Use the (possibly confirm-adjusted) `items`, not the closure's stale
+      // `payment.items` — enrollStudent() reads item.price for a 10-hour
+      // pack's sessionPack.total, so passing the unadjusted items would
+      // silently record the original amount even though the payment record
+      // itself (written above) shows the adjusted one.
+      enrollStudent(items, { name: payment.studentName, email: payment.studentEmail })
       setTeacherPayHist(h => [...(h||[]), {
         id: payment.id, student: payment.studentName,
-        items: payment.items, method: payment.method, total: payment.total,
+        items, method: payment.method, total: amt,
         date: new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
       }])
+    } else if (act === 'refund') {
+      const amt = Math.min(Math.max(0, Number(refundAmounts[payment.id] ?? payment.total) || 0), payment.total)
+      setPendingPayments(ps => ps.map(p =>
+        p.id === payment.id ? { ...p, status:'refunded',
+          refundAmount: amt,
+          refundNote:   payNotes[payment.id] || '',
+          refundedAt:   new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }),
+        } : p
+      ))
     } else {
       setPendingPayments(ps => ps.map(p =>
         p.id === payment.id ? { ...p, status:'rejected',
@@ -118,6 +164,11 @@ export default function TeacherPayments({
           <div className="stat-label">10-session packs</div>
           <div className="stat-val">{teacherSessionPacks.length}</div>
           <div className="stat-sub">Active packs</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Refunded</div>
+          <div className="stat-val">{refunded.length}</div>
+          <div className="stat-sub">{refundedTotal>0 ? `$${refundedTotal} returned` : 'None'}</div>
         </div>
       </div>
 
@@ -177,6 +228,18 @@ export default function TeacherPayments({
                     {(payment.items||[]).map(i => `${i.className} (${PKG_LABEL[i.pkgType]||i.pkgType})`).join(' · ')}
                   </div>
                   <div style={{fontSize:'var(--fs-sm)', fontWeight:500, marginTop:3}}>${payment.total}</div>
+                  {payment.adjustment != null && payment.adjustment !== 0 && (
+                    <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', marginTop:2}}>
+                      <i className="ti ti-info-circle" style={{marginRight:3}}/>
+                      Student applied a credit/discount to the whole order: subtotal ${payment.subtotal ?? (payment.total - payment.adjustment)} {payment.adjustment>0?'+':'-'} ${Math.abs(payment.adjustment)} = ${payment.total}. Distributing it across classes is up to you.
+                    </div>
+                  )}
+                  {payment.originalTotal != null && (
+                    <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', marginTop:2}}>
+                      <i className="ti ti-info-circle" style={{marginRight:3}}/>
+                      Confirmed at ${payment.total} (submitted ${payment.originalTotal} {payment.confirmAdjustment>0?'+':'-'} ${Math.abs(payment.confirmAdjustment)}){payment.confirmNote ? ` — "${payment.confirmNote}"` : ''}
+                    </div>
+                  )}
 
                   {payment.note && (
                     <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:4, fontStyle:'italic'}}>
@@ -192,6 +255,11 @@ export default function TeacherPayments({
                   {payment.status==='rejected' && (
                     <div style={{fontSize:'var(--fs-xs)', color:'#791F1F', marginTop:3}}>
                       Rejected{payment.rejectedAt ? ` ${payment.rejectedAt}` : ''}{payment.rejectNote ? ` — "${payment.rejectNote}"` : ''}
+                    </div>
+                  )}
+                  {payment.status==='refunded' && (
+                    <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', marginTop:3}}>
+                      Refunded ${payment.refundAmount ?? payment.total}{payment.refundedAt ? ` on ${payment.refundedAt}` : ''}{payment.refundNote ? ` — "${payment.refundNote}"` : ''}
                     </div>
                   )}
                 </div>
@@ -210,9 +278,15 @@ export default function TeacherPayments({
                   </div>
                 ) : (
                   <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0}}>
-                    <span className={`pill ${payment.status==='confirmed'?'pill-ok':'pill-no'}`}>
-                      {payment.status==='confirmed' ? '✓ Confirmed' : '✗ Rejected'}
+                    <span className={`pill ${payment.status==='confirmed'?'pill-ok':payment.status==='refunded'?'pill-info':'pill-no'}`}>
+                      {payment.status==='confirmed' ? '✓ Confirmed' : payment.status==='refunded' ? '↩ Refunded' : '✗ Rejected'}
                     </span>
+                    {payment.status==='confirmed' && (
+                      <button className="btn" style={{fontSize:10, padding:'2px 7px', borderColor:'#B25E14', color:'#B25E14'}}
+                        onClick={() => startPayAction(payment.id,'refund')}>
+                        <i className="ti ti-receipt-refund"/> Refund
+                      </button>
+                    )}
                     {payment.receiptFile && (
                       <button className="btn" style={{fontSize:10, padding:'2px 7px'}}
                         onClick={() => setPayExpandedId(isExpanded ? null : payment.id)}>
@@ -241,22 +315,79 @@ export default function TeacherPayments({
               )}
 
               {/* Inline action form */}
-              {isExpanded && payment.status==='pending' && (
+              {isExpanded && (payment.status==='pending' || chosenAct==='refund') && (() => {
+                const refundVal    = refundAmounts[payment.id] ?? String(payment.total)
+                const refundValid  = Number(refundVal) > 0 && Number(refundVal) <= payment.total
+                const confirmDeltaVal = confirmAdjustments[payment.id] ?? ''
+                const confirmDelta    = Number(confirmDeltaVal) || 0
+                const confirmValid    = confirmDeltaVal === '' || !Number.isNaN(Number(confirmDeltaVal))
+                const confirmAdjusted = confirmValid && confirmDelta !== 0
+                const confirmTotal    = Math.max(0, payment.total + confirmDelta)
+                return (
                 <div style={{marginTop:'var(--sp-sm)', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
                   {chosenAct==='confirm' ? (
-                    <div style={{background:'rgba(59,109,17,0.06)', border:'0.5px solid rgba(59,109,17,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#27500A', lineHeight:1.7}}>
-                      <i className="ti ti-info-circle"/> Confirming will:
-                      {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee'&&i.classId).length>0 && (
-                        <span> enroll <strong>{payment.studentName}</strong> in {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee').map(i=>i.className).join(', ')};</span>
+                    <>
+                      <div style={{display:'flex', gap:'var(--sp-sm)', alignItems:'flex-end', flexWrap:'wrap'}}>
+                        <div>
+                          <label className="form-label">Adjustment <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(negative = discount/credit)</span></label>
+                          <input type="number" step="0.01"
+                            value={confirmDeltaVal}
+                            placeholder="0"
+                            onChange={e => setConfirmAdjustments(a => ({...a, [payment.id]: e.target.value}))}
+                            style={{width:100}} />
+                        </div>
+                        <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', paddingBottom:8}}>
+                          ${payment.total} submitted{confirmAdjusted ? ` → $${confirmTotal} to confirm` : ''}
+                        </span>
+                      </div>
+                      {confirmAdjusted && (
+                        <div>
+                          <label className="form-label">Reason for adjustment <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span></label>
+                          <textarea value={payNotes[payment.id]||''} onChange={e => setPayNotes(n=>({...n,[payment.id]:e.target.value}))}
+                            placeholder="e.g. Returning-student credit applied." style={{minHeight:40}} />
+                        </div>
                       )}
-                      {(payment.items||[]).filter(i=>i.pkgType==='10pack').length>0 && (
-                        <span> activate a 10-session pack for <strong>{payment.studentName}</strong>;</span>
+                      <div style={{background:'rgba(59,109,17,0.06)', border:'0.5px solid rgba(59,109,17,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#27500A', lineHeight:1.7}}>
+                        <i className="ti ti-info-circle"/> Confirming will:
+                        {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee'&&i.classId).length>0 && (
+                          <span> enroll <strong>{payment.studentName}</strong> in {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee').map(i=>i.className).join(', ')};</span>
+                        )}
+                        {(payment.items||[]).filter(i=>i.pkgType==='10pack').length>0 && (
+                          <span> activate a 10-session pack for <strong>{payment.studentName}</strong>;</span>
+                        )}
+                        {(payment.items||[]).filter(i=>i.pkgType==='makeupFee').length>0 && (
+                          <span> record a ${confirmAdjusted ? confirmTotal : payment.total} makeup class fee for <strong>{payment.studentName}</strong> — no enrollment change;</span>
+                        )}
+                        {confirmAdjusted && <span> record ${confirmTotal} (submitted ${payment.total} {confirmDelta>0?'+':'-'} ${Math.abs(confirmDelta)});</span>}
+                        <span> update their dashboard and your roster.</span>
+                      </div>
+                    </>
+                  ) : chosenAct==='refund' ? (
+                    <>
+                      <div style={{background:'rgba(244,123,32,0.08)', border:'0.5px solid rgba(244,123,32,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#B25E14', lineHeight:1.7}}>
+                        <i className="ti ti-info-circle"/> This only records that <strong>{payment.studentName}</strong> was paid back — it
+                        does not send money. Actually return it via {METHOD_STYLE[payment.method]?.label || 'the original method'} first,
+                        then confirm here. This also does not drop their enrollment — use Roster separately if needed.
+                      </div>
+                      <div style={{display:'flex', gap:'var(--sp-sm)', alignItems:'flex-end', flexWrap:'wrap'}}>
+                        <div>
+                          <label className="form-label">Amount refunded</label>
+                          <input type="number" min={0} max={payment.total} step="0.01"
+                            value={refundVal}
+                            onChange={e => setRefundAmounts(a => ({...a, [payment.id]: e.target.value}))}
+                            style={{width:100}} />
+                        </div>
+                        <span style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', paddingBottom:8}}>of ${payment.total} paid</span>
+                      </div>
+                      {!refundValid && (
+                        <div style={{fontSize:'var(--fs-xs)', color:'#791F1F'}}>Enter an amount between $0.01 and ${payment.total}.</div>
                       )}
-                      {(payment.items||[]).filter(i=>i.pkgType==='makeupFee').length>0 && (
-                        <span> record a ${payment.total} makeup class fee for <strong>{payment.studentName}</strong> — no enrollment change;</span>
-                      )}
-                      <span> update their dashboard and your roster.</span>
-                    </div>
+                      <div>
+                        <label className="form-label">Note <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span></label>
+                        <textarea value={payNotes[payment.id]||''} onChange={e => setPayNotes(n=>({...n,[payment.id]:e.target.value}))}
+                          placeholder="e.g. Partial refund after dropping Ballet L2 mid-semester." style={{minHeight:48}} />
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div style={{background:'rgba(163,45,45,0.06)', border:'0.5px solid rgba(163,45,45,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#791F1F'}}>
@@ -272,13 +403,15 @@ export default function TeacherPayments({
                   <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
                     <button className="btn" onClick={() => cancelPayAction(payment.id)}>Cancel</button>
                     <button className="btn btn-p"
-                      style={chosenAct==='reject'?{background:'#791F1F',borderColor:'#791F1F'}:{}}
+                      style={chosenAct==='reject'?{background:'#791F1F',borderColor:'#791F1F'}:chosenAct==='refund'?{background:'#B25E14',borderColor:'#B25E14'}:{}}
+                      disabled={(chosenAct==='refund' && !refundValid) || (chosenAct==='confirm' && !confirmValid)}
                       onClick={() => confirmPayAction(payment)}>
-                      <i className="ti ti-send"/> {chosenAct==='confirm' ? 'Confirm & enroll student' : 'Confirm rejection'}
+                      <i className="ti ti-send"/> {chosenAct==='confirm' ? 'Confirm & enroll student' : chosenAct==='refund' ? 'Confirm refund' : 'Confirm rejection'}
                     </button>
                   </div>
                 </div>
-              )}
+                )
+              })()}
             </div>
           )
         })}

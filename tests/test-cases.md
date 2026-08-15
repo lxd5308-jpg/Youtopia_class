@@ -449,3 +449,183 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 - Step 3: Day/Time (and Category) still show the values that were true at enrollment time — unaffected by the edit or deletion in step 2. (This relies on `days`/`time`/`instructor`/`category`/`fee` being snapshotted onto the `enrollments` doc when it's written — check the doc in Firestore has these fields.)
 - Step 4: the delete confirmation names how many students are currently enrolled in that class and warns that their roster row's schedule will show "—" going forward, instead of the old generic "This cannot be undone" with no mention of affected students.
 - A class with zero enrollments still shows the plain confirmation with no warning text.
+
+---
+
+## TC-21 · Class change history survives a Drop, and shows the related payment
+
+**Requirement:** When a teacher drops a student from a class, the class disappears from the Roster table (no more enrollment row to expand), but the teacher must still be able to see that it happened and whether the student had paid for it — without cross-referencing Firestore or hunting through the Payments page unprompted.
+
+**Steps:**
+1. As a student, submit a payment for a class (Hub → pay via Zelle/Venmo/cash, e.g. $180 for "Ballet L2"), and as teacher confirm it in Payments so it's linked to that student + class name.
+2. As teacher, open Student roster, open the **Drop** dialog for that student's "Ballet L2" row — but don't confirm yet.
+3. Check the dialog, then confirm the drop.
+4. Scroll down to the new **Class change history** card below the roster table.
+5. Type the student's name into the roster search box.
+6. Repeat steps 1–3 for a class the student never paid for.
+
+**Expected:**
+- Step 2: before confirming, the dialog shows "$180 paid for this class across 1 payment (confirmed)" and a note that dropping doesn't auto-refund it.
+- Step 3: after confirming, the "Ballet L2" row disappears from the Student roster table entirely (as before this change).
+- Step 4: a new entry appears — student name, a red "Dropped" pill, "Dropped **Ballet L2**", today's date, and a "$180 paid for this class, not yet refunded — go to Payments to refund" line, still visible even though the roster row is gone.
+- Step 5: the search box also filters the Class change history card (not just the roster table) — typing the student's name keeps their drop/switch entries visible and hides unrelated ones.
+- Step 6: the dialog shows "No payment on file for this class," and the resulting history entry shows "No payment on file for this class" instead of a dollar amount.
+- `node tests/rules-test.mjs firestore.rules` passes, including the new `classChangeLog` cases (student denied read/write, teacher allowed).
+
+---
+
+## TC-22 · Drop/Switch works even when the enrollment's classId was stored as a string
+
+**Requirement:** `dropStudentClass`/`switchStudentClass` must resolve the class (for the log entry's name, and for removing the id from `enrolled`/`pendingEnroll`) even when the enrollment doc's `classId` field is a string while `classes[].id` is a number — the same kind of mismatch that caused the Day/Time bug (TC-19), but here on the *write* side.
+
+**Steps:**
+1. In Firestore (dev), create or find an `enrollments/{id}` doc where `classId` is a string (e.g. `"7"`) matching a real class whose `id` is the number `7`, and make sure that same number is in the student's `students/{id}.enrolled` array.
+2. As teacher, open the Drop dialog for that row and confirm the drop.
+3. Check the resulting Class change history entry and the student's own `enrolled` array in Firestore.
+4. Repeat with Switch instead of Drop, using a `fromClassId` stored as a string.
+
+**Expected:**
+- Step 3: the history entry shows the real class name (not "Dropped a class"), and any matching payment for that class name shows up correctly.
+- Step 3: `students/{id}.enrolled` no longer contains the class's numeric id — it was actually removed, not left behind because a string `classId` failed to strictly-equal the number in the array.
+- Step 4: same result for switch — `fromClassName` resolves correctly and the old numeric id is actually removed from `enrolled` (with the new class's id added).
+
+---
+
+## TC-23 · Refund a confirmed payment (full and partial)
+
+**Requirement:** A teacher can record that a confirmed payment was refunded — fully or partially — without it changing the student's enrollment, and the record shows up everywhere the payment already did (Payments page, Roster's Class change history and Drop dialog, CSV export).
+
+**Steps:**
+1. As teacher, go to Payments → Confirmed tab, find a confirmed payment (e.g. $684 total), click **Refund**.
+2. Try clicking "Confirm refund" with the amount field cleared / set to $0.
+3. Set the amount to the full $684 and confirm.
+4. Find a different confirmed payment, click Refund, set the amount to less than the total (e.g. $200 of $684), add a note, confirm.
+5. Check the Payments page stat cards and the Refunded tab.
+6. Go to Roster, find the student from step 3, open Class change history (or the Drop dialog if not yet dropped) for that class.
+7. Download the Payments CSV.
+
+**Expected:**
+- Step 1: the info box explicitly says this only records the refund and does not send money — actually returning it happens outside the app first.
+- Step 2: "Confirm refund" stays disabled with an inline error ("Enter an amount between $0.01 and $684").
+- Step 3: the payment moves out of Confirmed into the Refunded tab, shows "↩ Refunded" pill, and the enrollment/roster is untouched (confirming this does NOT call `enrollStudent` or change any `enrollments` doc).
+- Step 4: the payment also moves to Refunded, shows the $200 amount and note — not the full $684.
+- Step 5: "Confirmed payments" stat total no longer includes either refunded payment; the new "Refunded" stat card shows 2 payments and the correct combined $ total; the Refunded tab lists both with their respective amounts and notes.
+- Step 6: shows "$X refunded — nothing outstanding" (full refund) or "$684 paid, $200 refunded so far — go to Payments to finish it" (partial), matching the color (green for fully refunded, orange for partial/none).
+- Step 7: CSV includes Refunded/Refund Amount/Refund Note columns with the correct values for both rows.
+- `node tests/rules-test.mjs firestore.rules` still passes (no rules changes were needed — `payments/{id}` already allows unconditional teacher `update`).
+
+---
+
+## TC-24 · Prior-semester credit or discount: one order-level adjustment, item prices stay at catalog
+
+**Requirement:** A student enrolling in multiple classes with a credit or discount enters it once for the whole order, not per class — item prices always stay at the catalog rate, and it's up to the teacher to decide how the credit is allocated across classes outside the app. A teacher must separately be able to adjust the amount at confirm time via the same kind of delta field.
+
+**Steps:**
+1. As a student, go to Schedule, sign up for two classes (e.g. catalog prices $480 and $200 — subtotal $680), go to the cart in Hub.
+2. Confirm each class's price shown in the cart is still its plain catalog price (no per-item credit field). Scroll to the bottom, find the single "Credit / discount for this order" field, enter `-80`.
+3. Notice "Subtotal $680 - $80" appears above "Order total $600". Fill in the required note (e.g. "returning student credit -$80, teacher to allocate") and a receipt, submit.
+4. As teacher, go to Payments → Pending, find that submission.
+5. Click Confirm. Leave the Adjustment field at its default (blank/0).
+6. Find or submit a different single-class pending payment at full catalog price. Click Confirm, enter `-50` in the Adjustment field, add a reason, confirm.
+7. Check Roster for both students' payment amounts (Class change history / Drop dialog), and download the Payments CSV.
+
+**Expected:**
+- Step 2: each class item shows its plain catalog price with no adjustment control next to it.
+- Step 3: the "Subtotal ... / Order total" breakdown only appears once a non-zero credit is entered; with $0 it just shows "Order total $680".
+- Step 4: the pending payment lists total $600 (not $680), with an info line: "Student applied a credit/discount to the whole order: subtotal $680 - $80 = $600. Distributing it across classes is up to you." — each item's own price is still $480/$200 (catalog), not reduced.
+- Step 5: confirming with a blank/0 adjustment enrolls the student normally at $600 — `enrollments` docs and `enrolled` array are unaffected by price either way.
+- Step 6: after confirming with the adjustment, the payment shows "Confirmed at $X (submitted $Y - $50) — reason", `originalTotal` holds the pre-adjustment submitted amount, and (since it's a single-item payment) that item's own `price` is reduced by $50 to stay in sync with `total`.
+- Step 7: Roster's payment lookups (which key off `item.price`) show the catalog price for the multi-item order's classes (the order-level credit isn't attributed to either one), and the discounted price for the single-item teacher-adjusted payment.
+- Step 7: CSV includes "Subtotal ($)", "Order Adjustment ($)", "Submitted Total ($)", "Confirm Adjustment ($)", and "Confirm Adjustment Note" columns with correct values.
+
+---
+
+## TC-25 · Makeup class fee shows up on the student's own side, via Hub Payment History — not mixed into "My classes"
+
+**Requirement:** When a makeup-class fee creates a pending payment, the student who owes it must be able to see it on their own side — but "My classes" (Dashboard) is for classes, not payment administrivia, so any pending payment (fee, 10-hour pack, or a bundled multi-class purchase) belongs only in Hub's "Payment History," never mixed into the class list.
+
+**Steps:**
+1. As a student, request a makeup class for a class that costs more than the one they're in (triggers a fee — see TC-18), so a pending `payments` doc with `pkgType:'makeupFee'` gets created.
+2. As that student, go to Dashboard → "My classes" card.
+3. Also check Hub's "Payment History" card.
+4. Separately, submit a multi-class cart payment through Hub (several classes in one submission) while it's still pending, and check Dashboard's "My classes" again.
+5. As teacher, confirm or reject the makeup fee in Payments.
+
+**Expected:**
+- Step 2: no makeup-fee row (or any pending-payment row) appears in "My classes" — that card shows only actually-enrolled classes (plus the older `pendingEnroll`-array mechanism's pending class rows, unrelated to payments). The card's count in the header reflects only `enrolledClasses.length`.
+- Step 3: the makeup fee appears in Hub's Payment History with a "⏳ Pending" pill, the fee amount, and no stray "via" text (no payment method has been chosen yet for a fee).
+- Step 4: the bundled multi-class payment (e.g. "Ballet L3, Ballet L3, Competition Team 1 · $2746 · Pending") appears in Hub's Payment History as one row, but still does **not** appear anywhere in Dashboard's "My classes."
+- Step 5: once confirmed or rejected, the fee's status updates in Hub's Payment History accordingly; Dashboard's "My classes" is unaffected either way since it never showed it.
+
+---
+
+## TC-26 · Leave request session date must match the class's day of week
+
+**Requirement:** The "Session date" field on a leave request must not accept a date that falls on a different day of the week than the class actually meets, to cut down on students accidentally logging leave against the wrong date.
+
+**Steps:**
+1. As a student, find an enrolled class that meets on a specific day (e.g. "周二 Tue"). Click "Request leave" (test this on both Dashboard and My Classes — same fix, two files).
+2. Pick a date that is NOT a Tuesday (e.g. a Friday).
+3. Pick a date that IS a Tuesday.
+4. Fill in a reason and submit.
+5. Repeat for the Adult "Drop-in (Adult)" class, whose `days` is "Any".
+6. Check behavior around a timezone edge case: pick a date and confirm the shown day-of-week error (or lack of one) matches the actual local calendar day, not a day shifted by UTC parsing.
+
+**Expected:**
+- Step 2: an inline warning appears ("This class meets 周二 Tue — pick a matching date") and the Submit button is disabled.
+- Step 3: the warning disappears and Submit becomes enabled (assuming a reason is also filled in).
+- Step 4: the leave request submits normally with the matching date.
+- Step 5: no day restriction applies for a class whose `days` is "Any" — any date is accepted, Submit is never blocked by a day mismatch for this class.
+- Step 6: the picked date's weekday, as shown by the browser's native date picker, is what the mismatch check uses — no off-by-one from `new Date(isoString)` parsing as UTC midnight.
+
+---
+
+## TC-27 · Makeup request "Preferred date" must match the makeup class's own day, not the missed class's
+
+**Requirement:** Same restriction as TC-26, but for the makeup-request form's optional "Preferred date" — it must match the day the *selected makeup class* meets, not the day of the class the student is making up (those can legitimately differ, e.g. missed a Tuesday class, making it up in a Saturday class).
+
+**Steps:**
+1. As a student with an approved leave (whose own class meets, say, Tuesday), click "Request makeup class."
+2. In "Class to attend," pick a class that meets on a different day than the missed class (e.g. Saturday).
+3. In "Preferred date," pick a date that is NOT a Saturday.
+4. Pick a date that IS a Saturday.
+5. Leave "Preferred date" blank entirely and submit.
+6. Change "Class to attend" to a different class after already picking a valid date for the first one — confirm the mismatch re-evaluates against the newly selected class, not the old one.
+
+**Expected:**
+- Step 3: inline warning ("{Class name} meets 周六 Sat — pick a matching date") appears; "Submit request" is disabled. The warning must reference the *makeup* class's day, not the day of the class being missed.
+- Step 4: warning clears, Submit becomes enabled (assuming a class is selected).
+- Step 5: since "Preferred date" is optional, submitting with it blank is allowed regardless of the selected class's day — the mismatch check only applies once a date is actually entered.
+- Step 6: switching the selected class immediately re-checks the existing date against the new class's day — a date valid for the old selection can become invalid (and block Submit) for the new one, and vice versa.
+
+---
+
+## TC-28 · Confirm-time adjustment on a 10-hour pack payment stays in sync with the created sessionPack
+
+**Requirement:** When a teacher applies a confirm-time discount/credit adjustment to a single-item 10-hour-pack payment, the sessionPack record actually created must show the adjusted amount, not the original — same for a student-side cart credit applied to a pack-only purchase.
+
+**Steps:**
+1. As a student, submit a pack-only cart purchase (no classes) for $380 with a $-10 order-level credit (total $370). This auto-confirms immediately (no teacher review needed for a pack-only cart).
+2. Check the created sessionPack in Packages (teacher) / MyClasses or Dashboard (student) — its "Purchased ... · $X" total.
+3. Separately, as a student, submit a pack-only cart purchase for $380 with no credit. As teacher, Confirm it but apply a `-20` Adjustment.
+4. Check that sessionPack's total.
+
+**Expected:**
+- Step 2: sessionPack total shows $370, matching the payment record's total — not $380.
+- Step 4: sessionPack total shows $360 (380-20), matching the confirmed payment's total — not $380. (Before this fix, `enrollStudent` was called with the original unadjusted items, so the sessionPack would silently show the pre-discount amount while the payment record showed the discounted one.)
+
+---
+
+## TC-29 · Rejected/pending payments never count as "paid" in Roster's payment lookups
+
+**Requirement:** Roster's Drop dialog and Class change history only treat `confirmed`/`refunded` payments as money the student actually paid — a rejected payment (teacher declined it) or a still-pending one (not yet confirmed) must not inflate the "$X paid for this class" figure.
+
+**Steps:**
+1. Submit a payment for a class, and have the teacher reject it (receipt unclear, etc.).
+2. Submit a second payment for the same student+class and leave it pending (don't confirm or reject).
+3. Open the Drop dialog for that student's class row.
+4. Confirm the second payment, then reopen the Drop dialog.
+
+**Expected:**
+- Step 3: shows "No payment on file for this class" — neither the rejected nor the still-pending payment should be counted.
+- Step 4: after confirming, the dialog now shows the confirmed amount as paid.

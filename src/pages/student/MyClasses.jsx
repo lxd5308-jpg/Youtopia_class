@@ -9,6 +9,34 @@ function fmtDateISO(iso) {
   return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
 }
 
+const DAY_ABBR = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 }
+
+// classes[].days is a free-text field like "周二 Tue" (or "Any" for the
+// drop-in class) — pull out the recognizable weekday abbreviation(s) so a
+// leave request's session date can be checked against it. Returns null when
+// the field doesn't name a specific day (e.g. "Any"), meaning don't restrict.
+function classDayIndices(days) {
+  const matches = String(days || '').match(/Sun|Mon|Tue|Wed|Thu|Fri|Sat/gi)
+  return matches ? matches.map(m => DAY_ABBR[m[0].toUpperCase() + m.slice(1).toLowerCase()]) : null
+}
+
+// iso is a "YYYY-MM-DD" string from <input type="date">. Parsing that with
+// `new Date(iso)` reads it as UTC midnight, which getDay() can then report as
+// the *previous* day in any timezone behind UTC — construct from parts instead.
+function isoDayIndex(iso) {
+  if (!iso) return null
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay()
+}
+
+// True only when the class names specific day(s) and the picked date lands on
+// none of them — a class with no specific day ("Any") is never restricted.
+function leaveDateMismatch(days, iso) {
+  if (!iso) return false
+  const allowed = classDayIndices(days)
+  return allowed !== null && !allowed.includes(isoDayIndex(iso))
+}
+
 // Competition Team classes are never a valid makeup target, and fee/deposit
 // line items (no days/time) aren't real classes.
 function makeupOptions(classes) {
@@ -22,6 +50,10 @@ function makeupFee(classes, currentClassName, newClassName) {
 
 function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
   const fee = mkClass ? makeupFee(classes, currentClassName, mkClass) : 0
+  // Preferred date is for the *makeup* class's own schedule, not the class
+  // being missed — look up its days, not currentClassName's.
+  const selectedClass = mkClass ? classes.find(c => c.name === mkClass) : null
+  const dateMismatch   = !!mkDate && leaveDateMismatch(selectedClass?.days, mkDate)
   return (
     <div style={{ background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)', marginTop:4 }}>
       <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C' }}>
@@ -42,6 +74,11 @@ function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classe
           Preferred date <span style={{ fontWeight:400, color:'var(--color-text-secondary)' }}>(optional)</span>
         </label>
         <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} style={{ maxWidth:180 }} />
+        {dateMismatch && (
+          <div style={{ fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4 }}>
+            <i className="ti ti-alert-triangle" style={{ marginRight:3 }}/>{mkClass} meets {selectedClass?.days} — pick a matching date.
+          </div>
+        )}
       </div>
       {fee > 0 && (
         <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', background:'rgba(244,123,32,0.08)', border:'0.5px solid rgba(244,123,32,0.25)', borderRadius:'var(--r-sm)', padding:'6px 10px', lineHeight:1.5}}>
@@ -51,7 +88,7 @@ function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classe
       )}
       <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
         <button className="btn" style={{ fontSize:11 }} onClick={() => setMakeupFormFor(null)}>Cancel</button>
-        <button className="btn btn-p" style={{ fontSize:11 }} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
+        <button className="btn btn-p" style={{ fontSize:11 }} disabled={!mkClass || dateMismatch} onClick={() => submitMakeupRequest(leaveId)}>
           <i className="ti ti-send"/> Submit request
         </button>
       </div>
@@ -277,6 +314,7 @@ export default function MyClasses({
           const approved    = classLeaves.filter(r => r.status === 'approved').length
           const isFormOpen  = leaveFormFor === c.id
           const justSubmitted = leaveSubmitted[c.id]
+          const dateMismatch  = isFormOpen && leaveDateMismatch(c.days, leaveDate)
 
           return (
             <div key={c.id} style={{ padding:'12px 0', borderBottom:'0.5px solid var(--color-border-tertiary)' }}>
@@ -320,6 +358,11 @@ export default function MyClasses({
                   <div>
                     <label className="form-label">Session date *</label>
                     <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{ maxWidth:180 }} />
+                    {dateMismatch && (
+                      <div style={{ fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4 }}>
+                        <i className="ti ti-alert-triangle" style={{ marginRight:3 }}/>This class meets {c.days} — pick a matching date.
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="form-label">Reason *</label>
@@ -333,7 +376,7 @@ export default function MyClasses({
                   </div>
                   <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
                     <button className="btn" style={{ fontSize:12 }} onClick={() => setLeaveFormFor(null)}>Cancel</button>
-                    <button className="btn btn-p" style={{ fontSize:12 }} disabled={!leaveReason.trim() || !leaveDate} onClick={() => handleSubmitLeave(c)}>
+                    <button className="btn btn-p" style={{ fontSize:12 }} disabled={!leaveReason.trim() || !leaveDate || dateMismatch} onClick={() => handleSubmitLeave(c)}>
                       <i className="ti ti-send" /> Submit
                     </button>
                   </div>

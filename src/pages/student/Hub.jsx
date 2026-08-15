@@ -75,6 +75,10 @@ export default function Hub({
 function CartTab({ user, studentName, cart, setCart, classes, myPending, setPendingPayments, setPaymentHistory, navigate, setTab, enrollStudent }) {
   const [pkgTypes, setPkgTypes]     = useState(() => Object.fromEntries(cart.map(i => [i.classId, i.packageType || 'full'])))
   const [packAmount, setPackAmount] = useState('')   // custom amount for 10-hour pack
+  // One credit/discount for the whole order (not per class) — a signed delta
+  // off the subtotal. How it's actually allocated across classes is left to
+  // the teacher outside the app; the system doesn't try to split it.
+  const [cartAdjustment, setCartAdjustment] = useState('')
   const [payMethod, setPayMethod]   = useState('zelle')
   const [note, setNote]             = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
@@ -90,8 +94,10 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
     pkgType: pkgTypes[item.classId] || 'full',
   })).filter(i => i.cls)
 
-  const packAmountNum = has10Pack ? (Number(packAmount) || 0) : 0
-  const total = cartClasses.reduce((s, i) => s + calcPrice(i.cls, i.pkgType), 0) + packAmountNum
+  const packAmountNum   = has10Pack ? (Number(packAmount) || 0) : 0
+  const subtotal        = cartClasses.reduce((s, i) => s + calcPrice(i.cls, i.pkgType), 0) + packAmountNum
+  const cartAdjustmentNum = Number(cartAdjustment) || 0
+  const total            = Math.max(0, subtotal + cartAdjustmentNum)
   const cartEmpty = cartClasses.length === 0 && !has10Pack
 
   function updatePkg(classId, val) {
@@ -118,8 +124,16 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
     if (!validate()) return
     setSubmitting(true)
     try {
-      const packItems  = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packAmountNum }] : []
       const packOnly   = has10Pack && cartClasses.length === 0
+      // A pack-only cart skips teacher review and enrolls immediately below,
+      // so — unlike the mixed-cart case, which stays 'pending' for the
+      // teacher to confirm — there's no later point where a cart-level
+      // credit could get synced onto the pack's price. Bake it in now so the
+      // sessionPack this creates (whose `total` comes from this price) isn't
+      // left showing the pre-discount amount while the payment record shows
+      // the discounted one.
+      const packPrice  = packOnly ? total : packAmountNum
+      const packItems  = has10Pack ? [{ classId: '__10pack__', className: '10-hour pack', pkgType: '10pack', price: packPrice }] : []
       const now        = new Date()
       const submittedAt = now.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })
       const confirmedAt = now.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -140,7 +154,9 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
         note:           note.trim(),
         receiptFile:    receiptFile?.name     || null,
         receiptDataUrl: receiptFile?.dataUrl  || null,
+        subtotal,
         total,
+        ...(cartAdjustmentNum !== 0 ? { adjustment: cartAdjustmentNum } : {}),
         status:      packOnly ? 'confirmed' : 'pending',
         submittedAt,
         ...(packOnly ? { confirmedAt } : {}),
@@ -281,10 +297,35 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
                 </div>
               )
             })}
-            <div style={{display:'flex', justifyContent:'flex-end', paddingTop:'var(--sp-md)', gap:'var(--sp-md)'}}>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Order total</div>
-                <div style={{fontSize:20, fontWeight:500}}>{has10Pack && !packAmount ? '—' : `$${total}`}</div>
+            <div style={{paddingTop:'var(--sp-md)', display:'flex', flexDirection:'column', gap:6}}>
+              <div style={{display:'flex', justifyContent:'flex-end', alignItems:'center', gap:'var(--sp-sm)', flexWrap:'wrap'}}>
+                <label style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Credit / discount for this order</label>
+                <div style={{position:'relative', width:100}}>
+                  <span style={{position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>$</span>
+                  <input
+                    type="number" step="0.01"
+                    value={cartAdjustment}
+                    placeholder="0"
+                    onChange={e => setCartAdjustment(e.target.value)}
+                    style={{width:100, fontSize:'var(--fs-xs)', padding:'3px 6px 3px 18px', textAlign:'right'}}
+                  />
+                </div>
+              </div>
+              {cartAdjustmentNum !== 0 && (
+                <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', textAlign:'right'}}>
+                  <i className="ti ti-info-circle" style={{marginRight:3}}/>Please explain this credit/discount in the note below. Negative = discount. The teacher will decide how it applies across your classes.
+                </div>
+              )}
+              <div style={{display:'flex', justifyContent:'flex-end'}}>
+                <div style={{textAlign:'right'}}>
+                  {cartAdjustmentNum !== 0 && (
+                    <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>
+                      Subtotal ${subtotal} {cartAdjustmentNum>0?'+':'-'} ${Math.abs(cartAdjustmentNum)}
+                    </div>
+                  )}
+                  <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>Order total</div>
+                  <div style={{fontSize:20, fontWeight:500}}>{has10Pack && !packAmount ? '—' : `$${total}`}</div>
+                </div>
               </div>
             </div>
           </>
@@ -372,7 +413,7 @@ function CartTab({ user, studentName, cart, setCart, classes, myPending, setPend
               <div style={{flex:1, minWidth:0}}>
                 <div style={{fontSize:'var(--fs-sm)', fontWeight:500}}>{p.items.map(i => i.className).join(', ')}</div>
                 <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)', marginTop:2}}>
-                  ${p.total} via {p.method} · {p.submittedAt}
+                  ${p.total}{p.method ? ` via ${p.method}` : ''} · {p.submittedAt}
                 </div>
               </div>
               <span className={`pill ${p.status === 'confirmed' ? 'pill-ok' : p.status === 'rejected' ? 'pill-no' : 'pill-warn'}`} style={{fontSize:10}}>

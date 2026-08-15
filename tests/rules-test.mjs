@@ -176,6 +176,14 @@ const cases = [
   tc('teacher CAN read paymentHistory', 'ALLOW',
      { path: '/paymentHistory/h1', method: 'get', mail: TEACHER, data: { total: 200 } }),
 
+  // ── switch/drop audit trail ────────────────────────────────────
+  tc('student CANNOT read classChangeLog', 'DENY',
+     { path: '/classChangeLog/c1', method: 'get', mail: STUDENT, data: { studentEmail: STUDENT } }),
+  tc('student CANNOT write classChangeLog', 'DENY',
+     { path: '/classChangeLog/c1', method: 'create', mail: STUDENT, newData: { studentEmail: STUDENT } }),
+  tc('teacher CAN read and write classChangeLog', 'ALLOW',
+     { path: '/classChangeLog/c1', method: 'create', mail: TEACHER, newData: { studentEmail: STUDENT } }),
+
   // ── sessionPacks / enrollments ───────────────────────────────
   tc('student CAN create own enrollment', 'ALLOW',
      { path: '/enrollments/e1', method: 'create', mail: STUDENT, newData: OWNED }),

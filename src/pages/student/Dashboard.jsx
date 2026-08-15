@@ -10,6 +10,34 @@ function fmtDate(iso) {
   return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
 }
 
+const DAY_ABBR = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 }
+
+// classes[].days is a free-text field like "周二 Tue" (or "Any" for the
+// drop-in class) — pull out the recognizable weekday abbreviation(s) so a
+// leave request's session date can be checked against it. Returns null when
+// the field doesn't name a specific day (e.g. "Any"), meaning don't restrict.
+function classDayIndices(days) {
+  const matches = String(days || '').match(/Sun|Mon|Tue|Wed|Thu|Fri|Sat/gi)
+  return matches ? matches.map(m => DAY_ABBR[m[0].toUpperCase() + m.slice(1).toLowerCase()]) : null
+}
+
+// iso is a "YYYY-MM-DD" string from <input type="date">. Parsing that with
+// `new Date(iso)` reads it as UTC midnight, which getDay() can then report as
+// the *previous* day in any timezone behind UTC — construct from parts instead.
+function isoDayIndex(iso) {
+  if (!iso) return null
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay()
+}
+
+// True only when the class names specific day(s) and the picked date lands on
+// none of them — a class with no specific day ("Any") is never restricted.
+function leaveDateMismatch(days, iso) {
+  if (!iso) return false
+  const allowed = classDayIndices(days)
+  return allowed !== null && !allowed.includes(isoDayIndex(iso))
+}
+
 const LEAVE_STATUS = {
   pending:  { pill:'pill-warn', label:'⏳ Pending'  },
   approved: { pill:'pill-ok',   label:'✓ Approved'  },
@@ -35,6 +63,10 @@ function makeupFee(classes, currentClassName, newClassName) {
 
 function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
   const fee = mkClass ? makeupFee(classes, currentClassName, mkClass) : 0
+  // Preferred date is for the *makeup* class's own schedule, not the class
+  // being missed — look up its days, not currentClassName's.
+  const selectedClass = mkClass ? classes.find(c => c.name === mkClass) : null
+  const dateMismatch   = !!mkDate && leaveDateMismatch(selectedClass?.days, mkDate)
   return (
     <div style={{background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
       <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C'}}>
@@ -55,6 +87,11 @@ function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classe
             Preferred date <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span>
           </label>
           <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} />
+          {dateMismatch && (
+            <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>
+              <i className="ti ti-alert-triangle" style={{marginRight:3}}/>{mkClass} meets {selectedClass?.days} — pick a matching date.
+            </div>
+          )}
         </div>
       </div>
       {fee > 0 && (
@@ -65,7 +102,7 @@ function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classe
       )}
       <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
         <button className="btn" style={{fontSize:11}} onClick={() => setMakeupFormFor(null)}>Cancel</button>
-        <button className="btn btn-p" style={{fontSize:11}} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
+        <button className="btn btn-p" style={{fontSize:11}} disabled={!mkClass || dateMismatch} onClick={() => submitMakeupRequest(leaveId)}>
           <i className="ti ti-send"/> Submit request
         </button>
       </div>
@@ -76,7 +113,7 @@ function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classe
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
   leaveRequests=[], studentName, setStudentName, user, logSession, editSessionDate, deleteSession,
-  submitLeave, requestMakeup, studentLoading, pendingPayments=[],
+  submitLeave, requestMakeup, studentLoading,
 }) {
   const [nameInput, setNameInput] = useState(studentName || '')
   const [editingName, setEditingName] = useState(false)
@@ -125,11 +162,6 @@ export default function StudentDashboard({
   const [mkDate,        setMkDate]        = useState('')
   const [mkSubmitted,   setMkSubmitted]   = useState({})
 
-  const pendingPackPayments  = (pendingPayments||[]).filter(p =>
-    (p.studentEmail === (user?.email||'') || p.studentName === (studentName||'')) &&
-    p.status === 'pending' &&
-    (p.items||[]).some(i => i.pkgType === '10pack')
-  )
   const enrolledClasses      = classes.filter(c => enrolled.includes(c.id))
   const pendingEnrollClasses = classes.filter(c => pendingEnroll.includes(c.id) && !enrolled.includes(c.id))
   const pendingLeaves        = leaveRequests.filter(r => r.status==='pending')
@@ -286,11 +318,11 @@ export default function StudentDashboard({
       {/* ── My Classes (with inline leave request) ── */}
       <div className="card">
         <div className="card-hdr">
-          <span className="card-title">My classes ({enrolledClasses.length + pendingPackPayments.length})</span>
+          <span className="card-title">My classes ({enrolledClasses.length})</span>
           <button className="btn" onClick={() => navigate('sschedule')}>Browse classes</button>
         </div>
 
-        {enrolledClasses.length===0 && pendingPackPayments.length===0 ? (
+        {enrolledClasses.length===0 ? (
           <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
             <i className="ti ti-calendar-off" style={{fontSize:28,display:'block',marginBottom:8,opacity:.4}} />
             Not enrolled yet. <span style={{cursor:'pointer',color:'#E8401A',textDecoration:'underline'}} onClick={() => navigate('sschedule')}>Browse classes</span> to sign up.
@@ -300,6 +332,7 @@ export default function StudentDashboard({
             {enrolledClasses.map(c => {
               const isFormOpen    = leaveFormFor === c.id
               const justSubmitted = leaveSubmitted[c.id]
+              const dateMismatch  = isFormOpen && leaveDateMismatch(c.days, leaveDate)
               return (
                 <div key={c.id} style={{padding:'10px 0', borderBottom:'0.5px solid var(--color-border-tertiary)'}}>
                   {/* Class row */}
@@ -328,6 +361,11 @@ export default function StudentDashboard({
                       <div>
                         <label className="form-label">Session date *</label>
                         <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} style={{maxWidth:180}} />
+                        {dateMismatch && (
+                          <div style={{fontSize:'var(--fs-xs)', color:'#E8401A', marginTop:4}}>
+                            <i className="ti ti-alert-triangle" style={{marginRight:3}}/>This class meets {c.days} — pick a matching date.
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="form-label">Reason *</label>
@@ -341,7 +379,7 @@ export default function StudentDashboard({
                       </div>
                       <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
                         <button className="btn" style={{fontSize:12}} onClick={() => setLeaveFormFor(null)}>Cancel</button>
-                        <button className="btn btn-p" style={{fontSize:12}} disabled={!leaveReason.trim() || !leaveDate} onClick={() => handleSubmitLeave(c)}>
+                        <button className="btn btn-p" style={{fontSize:12}} disabled={!leaveReason.trim() || !leaveDate || dateMismatch} onClick={() => handleSubmitLeave(c)}>
                           <i className="ti ti-send" /> Submit
                         </button>
                       </div>
@@ -364,16 +402,6 @@ export default function StudentDashboard({
                 <div style={{flex:1, minWidth:0}}>
                   <div style={{fontSize:'var(--fs-body)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', opacity:0.75}}>{c.name}</div>
                   <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>{c.days} · {c.time}</div>
-                </div>
-                <span className="pill pill-warn">⏳ Pending</span>
-              </div>
-            ))}
-            {pendingPackPayments.map((p, i) => (
-              <div className="row" key={i}>
-                <span className="dot" style={{background:'#F5B800', opacity:0.5}} />
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontSize:'var(--fs-body)', fontWeight:500, opacity:0.75}}>10-hour pack</div>
-                  <div style={{fontSize:'var(--fs-xs)', color:'var(--color-text-secondary)'}}>${p.items.find(i => i.pkgType==='10pack')?.price || ''} · Submitted {p.submittedAt}</div>
                 </div>
                 <span className="pill pill-warn">⏳ Pending</span>
               </div>

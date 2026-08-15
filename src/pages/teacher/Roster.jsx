@@ -1,7 +1,7 @@
 import { useRef, useState, Fragment } from 'react'
 import { CATEGORY_LABELS } from '../../data/mockData'
 
-export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], switchStudentClass, dropStudentClass }) {
+export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], switchStudentClass, dropStudentClass, classChangeLog=[], pendingPayments=[] }) {
   const tableRef = useRef(null)
   const [action,   setAction]   = useState(null)  // { type:'switch'|'drop', studentEmail, studentName, classId, className }
   const [target,   setTarget]   = useState('')    // selected new classId (switch only)
@@ -51,6 +51,38 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
     r.studentEmail.toLowerCase().includes(q) ||
     r.className.toLowerCase().includes(q)
   )
+
+  // A dropped class has no enrollment row left to expand, so its history
+  // (and any payment made for it) has to live somewhere that survives the
+  // row disappearing — this list, independent of current enrollment state.
+  const historyRows = (!q ? classChangeLog : classChangeLog.filter(h =>
+    (h.studentName||'').toLowerCase().includes(q) ||
+    (h.studentEmail||'').toLowerCase().includes(q) ||
+    (h.fromClassName||'').toLowerCase().includes(q) ||
+    (h.toClassName||'').toLowerCase().includes(q)
+  )).slice().reverse()
+
+  // Payments aren't linked to an enrollment by ID — match by studentEmail +
+  // the item's className, the same key the CSV/Roster join already uses.
+  // Only 'confirmed'/'refunded' actually represent money that changed hands —
+  // a 'rejected' payment never happened, and a 'pending' one hasn't been
+  // confirmed yet, so neither belongs in a "$X paid for this class" total.
+  function paymentsFor(studentEmail, className) {
+    const matches = []
+    for (const p of pendingPayments) {
+      if (p.studentEmail !== studentEmail) continue
+      if (p.status !== 'confirmed' && p.status !== 'refunded') continue
+      for (const item of (p.items||[])) {
+        if (item.className === className) {
+          matches.push({
+            price: item.price || 0, status: p.status, submittedAt: p.submittedAt,
+            refundAmount: p.refundAmount, refundedAt: p.refundedAt,
+          })
+        }
+      }
+    }
+    return matches
+  }
 
   function toggleExpanded(key) {
     setExpanded(prev => prev === key ? null : key)
@@ -249,6 +281,72 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
         )}
       </div>
 
+      <div className="card">
+        <div className="card-hdr">
+          <span className="card-title">Class change history</span>
+          <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>{historyRows.length} of {classChangeLog.length}</span>
+        </div>
+
+        {classChangeLog.length===0 ? (
+          <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
+            <i className="ti ti-history" style={{fontSize:28,display:'block',marginBottom:8,opacity:.4}} />
+            No class switches or drops yet. When you use Switch or Drop above, it shows up here —
+            including for a dropped class after its roster row is gone.
+          </div>
+        ) : historyRows.length===0 ? (
+          <div style={{textAlign:'center',padding:'var(--sp-lg) 0',color:'var(--color-text-secondary)',fontSize:'var(--fs-sm)'}}>
+            <i className="ti ti-search-off" style={{fontSize:28,display:'block',marginBottom:8,opacity:.4}} />
+            No history matches "{search}".
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {historyRows.map(h => {
+              const payMatches = h.type==='drop' ? paymentsFor(h.studentEmail, h.fromClassName) : []
+              const payTotal   = payMatches.reduce((s,m)=>s+m.price, 0)
+              return (
+                <div key={h.id} style={{border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--r-sm)',padding:'8px 10px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontWeight:500}}>{h.studentName}</span>
+                    <span className={`pill ${h.type==='drop'?'pill-no':'pill-info'}`} style={{fontSize:10}}>
+                      {h.type==='drop' ? 'Dropped' : 'Switched'}
+                    </span>
+                    {h.date && <span style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>{h.date}</span>}
+                  </div>
+                  <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)',marginTop:4}}>
+                    {h.type==='drop'
+                      ? <>Dropped <strong>{h.fromClassName || 'a class'}</strong></>
+                      : <><strong>{h.fromClassName || 'a class'}</strong> → <strong>{h.toClassName || 'a class'}</strong></>
+                    }
+                  </div>
+                  {h.note && (
+                    <div style={{fontSize:'var(--fs-xs)',fontStyle:'italic',marginTop:3}}>Note: "{h.note}"</div>
+                  )}
+                  {h.type==='drop' && (() => {
+                    const allRefunded = payMatches.length>0 && payMatches.every(m=>m.status==='refunded')
+                    const anyRefunded = payMatches.some(m=>m.status==='refunded')
+                    const refundedAmt = payMatches.filter(m=>m.status==='refunded').reduce((s,m)=>s+(m.refundAmount??m.price),0)
+                    const color = payMatches.length===0 ? 'var(--color-text-secondary)' : allRefunded ? '#27500A' : '#B25E14'
+                    return (
+                      <div style={{fontSize:'var(--fs-xs)',color,marginTop:5,paddingTop:5,borderTop:'0.5px solid var(--color-border-tertiary)'}}>
+                        <i className={`ti ti-${allRefunded ? 'circle-check' : 'cash'}`} style={{marginRight:4}}/>
+                        {payMatches.length===0
+                          ? 'No payment on file for this class'
+                          : allRefunded
+                            ? <>${refundedAmt} refunded — nothing outstanding</>
+                            : anyRefunded
+                              ? <>${payTotal} paid, ${refundedAmt} refunded so far — go to Payments to finish it</>
+                              : <>${payTotal} paid for this class, not yet refunded — go to Payments to refund</>
+                        }
+                      </div>
+                    )
+                  })()}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {action && (
         <div
           role="dialog" aria-modal="true"
@@ -287,9 +385,34 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
                 </select>
               </div>
             ) : (
-              <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',marginBottom:'var(--sp-md)',lineHeight:1.6}}>
-                This removes the student from the class roster and their enrolled list. This does not
-                affect any separate 10-hour package hours, which aren't tied to a specific class.
+              <div style={{marginBottom:'var(--sp-md)'}}>
+                <div style={{fontSize:'var(--fs-sm)',color:'var(--color-text-secondary)',lineHeight:1.6,marginBottom:8}}>
+                  This removes the student from the class roster and their enrolled list. This does not
+                  affect any separate 10-hour package hours, which aren't tied to a specific class.
+                </div>
+                {(() => {
+                  const payMatches  = paymentsFor(action.studentEmail, action.className)
+                  const payTotal    = payMatches.reduce((s,m)=>s+m.price, 0)
+                  const allRefunded = payMatches.length>0 && payMatches.every(m=>m.status==='refunded')
+                  const anyRefunded = payMatches.some(m=>m.status==='refunded')
+                  return payMatches.length > 0 ? (
+                    <div style={{fontSize:'var(--fs-xs)',color: allRefunded ? '#27500A' : '#B25E14',background: allRefunded ? 'rgba(59,109,17,0.06)' : 'rgba(244,123,32,0.08)',border: `0.5px solid ${allRefunded ? 'rgba(59,109,17,0.25)' : 'rgba(244,123,32,0.25)'}`,borderRadius:'var(--r-sm)',padding:'8px 10px',lineHeight:1.6}}>
+                      <i className={`ti ti-${allRefunded ? 'circle-check' : 'cash'}`} style={{marginRight:4}}/>
+                      ${payTotal} paid for this class across {payMatches.length} payment{payMatches.length>1?'s':''}
+                      ({payMatches.map(m=>m.status).join(', ')}).{' '}
+                      {allRefunded
+                        ? 'Already fully refunded.'
+                        : anyRefunded
+                          ? 'Partially refunded — dropping does not refund the rest automatically, handle it in Payments.'
+                          : 'Dropping does not refund it automatically — handle any refund separately in Payments.'
+                      }
+                    </div>
+                  ) : (
+                    <div style={{fontSize:'var(--fs-xs)',color:'var(--color-text-secondary)'}}>
+                      <i className="ti ti-cash-off" style={{marginRight:4}}/>No payment on file for this class.
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
