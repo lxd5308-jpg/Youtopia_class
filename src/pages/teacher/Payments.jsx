@@ -6,7 +6,7 @@ const METHOD_STYLE = {
   cash:  { icon:'$', bg:'rgba(15,110,86,0.12)',  col:'#0F6E56', label:'Cash'  },
 }
 
-const PKG_LABEL = { full:'Full semester', '10pack':'10-session pack', dropin:'Drop-in' }
+const PKG_LABEL = { full:'Full semester', '10pack':'10-session pack', dropin:'Drop-in', makeupFee:'Makeup class fee' }
 
 export default function TeacherPayments({
   pendingPayments, setPendingPayments,
@@ -246,11 +246,14 @@ export default function TeacherPayments({
                   {chosenAct==='confirm' ? (
                     <div style={{background:'rgba(59,109,17,0.06)', border:'0.5px solid rgba(59,109,17,0.25)', borderRadius:'var(--r-sm)', padding:'var(--sp-sm) var(--sp-md)', fontSize:'var(--fs-xs)', color:'#27500A', lineHeight:1.7}}>
                       <i className="ti ti-info-circle"/> Confirming will:
-                      {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.classId).length>0 && (
-                        <span> enroll <strong>{payment.studentName}</strong> in {(payment.items||[]).filter(i=>i.pkgType!=='10pack').map(i=>i.className).join(', ')};</span>
+                      {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee'&&i.classId).length>0 && (
+                        <span> enroll <strong>{payment.studentName}</strong> in {(payment.items||[]).filter(i=>i.pkgType!=='10pack'&&i.pkgType!=='makeupFee').map(i=>i.className).join(', ')};</span>
                       )}
                       {(payment.items||[]).filter(i=>i.pkgType==='10pack').length>0 && (
                         <span> activate a 10-session pack for <strong>{payment.studentName}</strong>;</span>
+                      )}
+                      {(payment.items||[]).filter(i=>i.pkgType==='makeupFee').length>0 && (
+                        <span> record a ${payment.total} makeup class fee for <strong>{payment.studentName}</strong> — no enrollment change;</span>
                       )}
                       <span> update their dashboard and your roster.</span>
                     </div>

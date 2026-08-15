@@ -36,6 +36,8 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **Check what the code actually does before hardening it.** The "students shouldn't approve their own make-ups" rule would have broken the feature: `requestMakeup` sets `status:'approved'` on purpose. The guard that was actually needed protects the teacher's *decision* (`makeup.resolvedAt`), not the initial request.
 
+- **`payments/{id}` is student-create, teacher-only update/delete.** A student can create a new payment doc (`willOwn()`) but can never update or delete an existing one, even one of their own. Any student-triggered flow that writes a payment record (fees, purchases) must mint a fresh doc ID every time (`` `type_${id}_${Date.now()}` ``) — reusing a deterministic ID and relying on `merge:true` works for the first write and then throws `permission-denied` on the second.
+
 ---
 
 ## State & Backend
@@ -51,6 +53,14 @@ When the user requests a fix or correction, extract the general principle behind
 - **When you change what the app writes, find every reader.** Both summary bugs came from a change whose downstream consumers were missed: a new date format, and auto-enrolment that stopped writing `enrollments` — which the Roster, the Dashboard student count and Messages recipient filtering also read. Grep for the collection or field name before shipping a format or flow change.
 
 - **Fee and deposit line items are not classes.** "Registration Fee" and "Team 2 Deposit" live in the same class list but have empty `days`/`time`/`duration` and `sessions: 1`. Anything that treats the class list as enrolments (Roster, enrollment records) must filter them out with `days || time`.
+
+- **Never compare a stored `classId` to `classes[].id` with a bare `===`.** `classId` reaches Firestore through several paths — some from `cls.id` (already a number), some from a raw `<select>` value (a string) — so a strict `===` can silently fail to match and any field that only exists on the matched class (`days`, `time`, `fee`, `instructor`, …) quietly renders blank, while fields stored directly on the record (like `className`) keep showing fine and mask the bug. Compare with `String(c.id) === String(otherId)`, or explicitly `Number(...)` the value at the point it leaves a `<select>` — both patterns are already used elsewhere in the app (`Messages.jsx`, `App.jsx`'s `sendTeacherMessage`); apply the same guard anywhere a `classId` field gets looked up against the class list, including `Set.has()` checks.
+
+- **A `payments/{id}` item without a `classId` is a charge only, not an enrollment.** `enrollStudent()` (called on payment confirm) treats any item with `pkgType !== '10pack' && classId` as a class to enroll in. A fee that must never grant enrollment (e.g. a makeup-class fee) has to omit `classId` entirely — setting it to a real class id, even "just for reference," will silently enroll the student when the teacher confirms the payment.
+
+- **Deleting a class does not cascade to `enrollments`.** `Configuration.jsx`'s `deleteClass` just filters the class out of `classes` — any student still enrolled in it keeps a `classId` that no longer resolves to anything, permanently losing that class's day/time/instructor/category/fee everywhere those get looked up live (Roster, CSV export). `enrollments` docs now snapshot `days`/`time`/`instructor`/`category`/`fee` at write time (in `addClassToCart`, `enrollStudent`, `switchStudentClass` in App.jsx) precisely so a later edit or deletion of the class can't blank out historical data — the live class lookup is only a fallback for records written before the snapshot existed. `deleteClass` also now warns with the affected student count before deleting. Any new path that writes an `enrollments` doc must include the same snapshot fields, and any new place that mutates or removes an entry from `classes` should consider whether it needs the same enrollment-count warning.
+
+- **Money math belongs in the `App.jsx` action function, not the page component.** Page components may show a live preview to the student, but the value actually written and charged must be recomputed from trusted server-side data (`td.classes`) inside the App.jsx function that performs the write — never accepted as a field on the data the client passed in. This is what lets a fee formula stay correct even if the UI preview has a bug or the client is tampered with.
 
 ---
 

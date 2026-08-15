@@ -22,6 +22,57 @@ const MK_STATUS = {
   declined: { pill:'pill-no',   label:'✗ Declined'  },
 }
 
+// Competition Team classes are never a valid makeup target, and fee/deposit
+// line items (no days/time) aren't real classes.
+function makeupOptions(classes) {
+  return classes.filter(c => (c.days || c.time) && c.category !== 'comp')
+}
+function makeupFee(classes, currentClassName, newClassName) {
+  const cur = classes.find(c => c.name === currentClassName)
+  const nw  = classes.find(c => c.name === newClassName)
+  return (cur && nw) ? Math.max(0, (nw.fee || 0) - (cur.fee || 0)) : 0
+}
+
+function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
+  const fee = mkClass ? makeupFee(classes, currentClassName, mkClass) : 0
+  return (
+    <div style={{background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
+      <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C'}}>
+        <i className="ti ti-school" style={{marginRight:4}}/>{isRedo ? 'Request a new makeup class' : 'Request a makeup class'}
+      </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)'}}>
+        <div>
+          <label className="form-label">Class to attend *</label>
+          <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
+            <option value="">— Select class —</option>
+            {makeupOptions(classes).map(c => (
+              <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="form-label">
+            Preferred date <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span>
+          </label>
+          <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} />
+        </div>
+      </div>
+      {fee > 0 && (
+        <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', background:'rgba(244,123,32,0.08)', border:'0.5px solid rgba(244,123,32,0.25)', borderRadius:'var(--r-sm)', padding:'6px 10px', lineHeight:1.5}}>
+          <i className="ti ti-alert-triangle" style={{marginRight:4}}/>
+          {mkClass} costs more than {currentClassName || 'your current class'} — an additional <strong>${fee}</strong> fee will apply.
+        </div>
+      )}
+      <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
+        <button className="btn" style={{fontSize:11}} onClick={() => setMakeupFormFor(null)}>Cancel</button>
+        <button className="btn btn-p" style={{fontSize:11}} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
+          <i className="ti ti-send"/> Submit request
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function StudentDashboard({
   navigate, classes=[], cart=[], enrolled=[], pendingEnroll=[], sessionPacks=[],
   leaveRequests=[], studentName, setStudentName, user, logSession, editSessionDate, deleteSession,
@@ -387,6 +438,7 @@ export default function StudentDashboard({
                   <span style={{fontWeight:500, color:'var(--color-text-primary)'}}>Make up:</span> {mk.className}
                   {mk.days ? ` · ${mk.days}` : ''}
                   {mk.date ? ` · ${mk.date}` : ''}
+                  {mk.fee > 0 ? ` · +$${mk.fee} fee` : ''}
                 </div>
               )}
 
@@ -399,35 +451,12 @@ export default function StudentDashboard({
                     </div>
                   ) : !mk ? (
                     isMkFormOpen ? (
-                      /* ── Inline makeup form ── */
-                      <div style={{background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
-                        <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C'}}>
-                          <i className="ti ti-school" style={{marginRight:4}}/>Request a makeup class
-                        </div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)'}}>
-                          <div>
-                            <label className="form-label">Class to attend *</label>
-                            <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
-                              <option value="">— Select class —</option>
-                              {classes.map(c => (
-                                <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="form-label">
-                              Preferred date <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span>
-                            </label>
-                            <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} />
-                          </div>
-                        </div>
-                        <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
-                          <button className="btn" style={{fontSize:11}} onClick={() => setMakeupFormFor(null)}>Cancel</button>
-                          <button className="btn btn-p" style={{fontSize:11}} disabled={!mkClass} onClick={() => submitMakeupRequest(r.id)}>
-                            <i className="ti ti-send"/> Submit request
-                          </button>
-                        </div>
-                      </div>
+                      <MakeupForm leaveId={r.id} currentClassName={r.className} isRedo={false}
+                        mkClass={mkClass} mkDate={mkDate} classes={classes}
+                        setMkClass={setMkClass} setMkDate={setMkDate}
+                        setMakeupFormFor={setMakeupFormFor}
+                        submitMakeupRequest={submitMakeupRequest}
+                      />
                     ) : (
                       <button className="btn" style={{fontSize:11, padding:'3px 10px'}} onClick={() => openMakeupForm(r.id)}>
                         <i className="ti ti-school" style={{marginRight:4}}/>Request makeup class
@@ -436,44 +465,22 @@ export default function StudentDashboard({
                   ) : mk.status==='pending' ? (
                     <div style={{fontSize:'var(--fs-xs)', color:'#0C447C'}}>
                       <i className="ti ti-clock" style={{marginRight:4}}/>
-                      Makeup pending approval: <strong>{mk.className}</strong>{mk.date ? ` · ${mk.date}` : ''}
+                      Makeup pending approval: <strong>{mk.className}</strong>{mk.date ? ` · ${mk.date}` : ''}{mk.fee > 0 && <span> · +${mk.fee} fee</span>}
                     </div>
                   ) : mk.status==='approved' ? (
                     <div style={{fontSize:'var(--fs-xs)', color:'#27500A'}}>
                       <i className="ti ti-school" style={{marginRight:4}}/>
-                      Makeup approved: <strong>{mk.className}</strong>{mk.date ? ` · ${mk.date}` : ''}
+                      Makeup approved: <strong>{mk.className}</strong>{mk.date ? ` · ${mk.date}` : ''}{mk.fee > 0 && <span> · +${mk.fee} fee</span>}
                     </div>
                   ) : (
                     /* declined — offer re-request */
                     isMkFormOpen ? (
-                      <div style={{background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)'}}>
-                        <div style={{fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C'}}>
-                          <i className="ti ti-school" style={{marginRight:4}}/>Request a new makeup class
-                        </div>
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'var(--sp-sm)'}}>
-                          <div>
-                            <label className="form-label">Class to attend *</label>
-                            <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
-                              <option value="">— Select class —</option>
-                              {classes.map(c => (
-                                <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="form-label">
-                              Preferred date <span style={{fontWeight:400, color:'var(--color-text-secondary)'}}>(optional)</span>
-                            </label>
-                            <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} />
-                          </div>
-                        </div>
-                        <div style={{display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end'}}>
-                          <button className="btn" style={{fontSize:11}} onClick={() => setMakeupFormFor(null)}>Cancel</button>
-                          <button className="btn btn-p" style={{fontSize:11}} disabled={!mkClass} onClick={() => submitMakeupRequest(r.id)}>
-                            <i className="ti ti-send"/> Submit request
-                          </button>
-                        </div>
-                      </div>
+                      <MakeupForm leaveId={r.id} currentClassName={r.className} isRedo={true}
+                        mkClass={mkClass} mkDate={mkDate} classes={classes}
+                        setMkClass={setMkClass} setMkDate={setMkDate}
+                        setMakeupFormFor={setMakeupFormFor}
+                        submitMakeupRequest={submitMakeupRequest}
+                      />
                     ) : (
                       <div style={{display:'flex', alignItems:'center', gap:8}}>
                         <span style={{fontSize:'var(--fs-xs)', color:'#791F1F'}}>

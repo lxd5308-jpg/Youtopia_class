@@ -9,7 +9,19 @@ function fmtDateISO(iso) {
   return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
 }
 
-function MakeupForm({ leaveId, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
+// Competition Team classes are never a valid makeup target, and fee/deposit
+// line items (no days/time) aren't real classes.
+function makeupOptions(classes) {
+  return classes.filter(c => (c.days || c.time) && c.category !== 'comp')
+}
+function makeupFee(classes, currentClassName, newClassName) {
+  const cur = classes.find(c => c.name === currentClassName)
+  const nw  = classes.find(c => c.name === newClassName)
+  return (cur && nw) ? Math.max(0, (nw.fee || 0) - (cur.fee || 0)) : 0
+}
+
+function MakeupForm({ leaveId, currentClassName, isRedo, mkClass, mkDate, classes, setMkClass, setMkDate, setMakeupFormFor, submitMakeupRequest }) {
+  const fee = mkClass ? makeupFee(classes, currentClassName, mkClass) : 0
   return (
     <div style={{ background:'rgba(24,95,165,0.05)', border:'0.5px solid rgba(24,95,165,0.2)', borderRadius:'var(--r-sm)', padding:'8px 10px', display:'flex', flexDirection:'column', gap:'var(--sp-sm)', marginTop:4 }}>
       <div style={{ fontSize:'var(--fs-xs)', fontWeight:500, color:'#0C447C' }}>
@@ -20,7 +32,7 @@ function MakeupForm({ leaveId, isRedo, mkClass, mkDate, classes, setMkClass, set
         <label className="form-label">Class to attend *</label>
         <select value={mkClass} onChange={e => setMkClass(e.target.value)}>
           <option value="">— Select class —</option>
-          {classes.map(c => (
+          {makeupOptions(classes).map(c => (
             <option key={c.id} value={c.name}>{c.name} ({c.days})</option>
           ))}
         </select>
@@ -31,6 +43,12 @@ function MakeupForm({ leaveId, isRedo, mkClass, mkDate, classes, setMkClass, set
         </label>
         <input type="date" value={mkDate} onChange={e => setMkDate(e.target.value)} style={{ maxWidth:180 }} />
       </div>
+      {fee > 0 && (
+        <div style={{fontSize:'var(--fs-xs)', color:'#B25E14', background:'rgba(244,123,32,0.08)', border:'0.5px solid rgba(244,123,32,0.25)', borderRadius:'var(--r-sm)', padding:'6px 10px', lineHeight:1.5}}>
+          <i className="ti ti-alert-triangle" style={{marginRight:4}}/>
+          {mkClass} costs more than {currentClassName || 'your current class'} — an additional <strong>${fee}</strong> fee will apply.
+        </div>
+      )}
       <div style={{ display:'flex', gap:'var(--sp-sm)', justifyContent:'flex-end' }}>
         <button className="btn" style={{ fontSize:11 }} onClick={() => setMakeupFormFor(null)}>Cancel</button>
         <button className="btn btn-p" style={{ fontSize:11 }} disabled={!mkClass} onClick={() => submitMakeupRequest(leaveId)}>
@@ -376,7 +394,7 @@ export default function MyClasses({
                             </div>
                           ) : !lr.makeup ? (
                             makeupFormFor===lr.id ? (
-                              <MakeupForm leaveId={lr.id} isRedo={false}
+                              <MakeupForm leaveId={lr.id} currentClassName={c.name} isRedo={false}
                                 mkClass={mkClass} mkDate={mkDate} classes={classes}
                                 setMkClass={setMkClass} setMkDate={setMkDate}
                                 setMakeupFormFor={setMakeupFormFor}
@@ -392,16 +410,18 @@ export default function MyClasses({
                               <i className="ti ti-clock" style={{ marginRight:4 }}/>
                               Makeup pending approval: <strong>{lr.makeup.className}</strong>
                               {lr.makeup.date && ` · ${lr.makeup.date}`}
+                              {lr.makeup.fee > 0 && ` · +$${lr.makeup.fee} fee`}
                             </div>
                           ) : lr.makeup.status==='approved' ? (
                             <div style={{ fontSize:'var(--fs-xs)', color:'#27500A' }}>
                               <i className="ti ti-school" style={{ marginRight:4 }}/>
                               Makeup approved: <strong>{lr.makeup.className}</strong>
                               {lr.makeup.date && ` · ${lr.makeup.date}`}
+                              {lr.makeup.fee > 0 && ` · +$${lr.makeup.fee} fee`}
                             </div>
                           ) : (
                             makeupFormFor===lr.id ? (
-                              <MakeupForm leaveId={lr.id} isRedo={true}
+                              <MakeupForm leaveId={lr.id} currentClassName={c.name} isRedo={true}
                                 mkClass={mkClass} mkDate={mkDate} classes={classes}
                                 setMkClass={setMkClass} setMkDate={setMkDate}
                                 setMakeupFormFor={setMakeupFormFor}

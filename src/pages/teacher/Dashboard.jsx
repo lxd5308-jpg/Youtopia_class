@@ -231,6 +231,7 @@ export default function Dashboard({
                       Wants to attend: <strong>{mk.className}</strong>
                       {mk.instructor && <span> · 👤 {mk.instructor}</span>}
                       {mk.date && <span> · {mk.date}</span>}
+                      {mk.fee > 0 && <span style={{color:'#B25E14', fontWeight:500}}> · +${mk.fee} fee</span>}
                       <span style={{color:'var(--color-text-secondary)', marginLeft:6}}>· Requested {mk.requestedAt}</span>
                     </div>
                   )}
@@ -301,7 +302,7 @@ export default function Dashboard({
                   ) : mk.status==='approved' ? (
                     <div style={{display:'flex', alignItems:'center', gap:6, fontSize:'var(--fs-xs)', color:'#27500A', background:'rgba(59,109,17,0.05)', border:'0.5px solid rgba(59,109,17,0.2)', borderRadius:'var(--r-sm)', padding:'5px 10px', marginTop:4}}>
                       <i className="ti ti-school"/>
-                      <span>Makeup approved: <strong>{mk.className}</strong>{mk.instructor && <span> · 👤 {mk.instructor}</span>}{mk.date && <span> · {mk.date}</span>}</span>
+                      <span>Makeup approved: <strong>{mk.className}</strong>{mk.instructor && <span> · 👤 {mk.instructor}</span>}{mk.date && <span> · {mk.date}</span>}{mk.fee > 0 && <span> · +${mk.fee} fee</span>}</span>
                     </div>
                   ) : mk.status==='declined' ? (
                     <div style={{fontSize:'var(--fs-xs)', color:'#791F1F', opacity:.7, marginTop:4}}>

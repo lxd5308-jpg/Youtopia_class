@@ -341,3 +341,111 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 - "Sign-in didn't finish. Please try again." is shown.
 - Tapping the button again starts a fresh sign-in that completes normally.
 - A *successful* sign-in is NOT interrupted by this recovery (verify a normal login still works end to end).
+
+---
+
+## TC-15 · Roster: switch a student to a different class
+
+**Requirement:** A teacher can move a student from one class to another from the Roster without touching Firestore directly, and the change is reflected everywhere enrollment data is read from.
+
+**Steps:**
+1. Log in as teacher, open Student roster.
+2. Find a row for a student enrolled in Class A. Click **Switch**.
+3. In the dialog, pick a different class (Class B) from the dropdown — classes the student is already enrolled in must not appear in the list — optionally add a note, then confirm.
+
+**Expected:**
+- The dialog closes and the roster row now shows Class B instead of Class A (no full page reload needed).
+- The student's `enrolled` list no longer contains Class A's id and now contains Class B's id (check `students/{email}` in Firestore, or have the student reload their Schedule/My Classes page).
+- The old `enrollments` record for Class A is gone; a new one exists for Class B with a fresh `enrolledAt` timestamp and the same package type the old enrollment had.
+- Any generic 10-hour package hours the student has are untouched — switching classes must not change `sessionsUsed` on any pack.
+- Confirm button stays disabled until a target class is chosen.
+
+---
+
+## TC-16 · Roster: drop a student from a class
+
+**Requirement:** A teacher can withdraw a student from a single class from the Roster, removing it from their enrolled classes without affecting unrelated classes or package hours.
+
+**Steps:**
+1. Log in as teacher, open Student roster.
+2. Find a student enrolled in two different classes. Click **Drop** on one of the two rows.
+3. Confirm the drop in the dialog.
+
+**Expected:**
+- The dropped class's row disappears from the roster; the student's other class row is untouched.
+- The student's `enrolled` list no longer contains the dropped class's id; the other class id remains.
+- The `enrollments` record for the dropped class is deleted.
+- The student's 10-hour package hours (if any) are unchanged.
+- Cancel closes the dialog without writing anything.
+- Works at 320px width: the dialog does not overflow horizontally and both buttons stay tappable.
+
+---
+
+## TC-17 · Roster: leave/makeup detail, search, and CSV export
+
+**Requirement:** A teacher can see full leave and makeup detail (date, reason, makeup class, fee) per student directly on the Roster, search the roster, and download it with that detail included.
+
+**Steps:**
+1. Log in as teacher, open Student roster. Find a student row with at least one leave request and one makeup request.
+2. Click the "leave(s)" pill, the "makeup(s)" pill, or the **Detail** button.
+3. Type part of a student's name, email, or class name into the search box.
+4. Clear the search, then click **Download CSV**.
+
+**Expected:**
+- Step 2 expands an inline panel under that row showing, per leave request: date, status pill, reason, teacher note (if any), and — if a makeup was requested — the makeup class, instructor, date, status, and `+$X fee` when a fee applies. Clicking again collapses it.
+- Step 3 narrows the table to only matching rows; a "No students match" message appears if nothing matches.
+- Step 4's CSV includes a "Leave Details" and "Makeup Details" column with the same date/reason/fee information as the on-screen panel, for whatever rows were visible at download time.
+- No horizontal overflow at 320px width; the search box and Download CSV button wrap onto their own line rather than clipping.
+
+---
+
+## TC-18 · Makeup request: Competition Team excluded, fee for a pricier class
+
+**Requirement:** A student cannot request a makeup class in a Competition Team class. If the makeup class costs more per session than their own class, the flat fee difference is charged; if it costs the same or less, no fee applies.
+
+**Steps:**
+1. Log in as a student with an approved leave request for a non-Competition class (e.g. a 2hr, $48/session class).
+2. Click "Request makeup class". Check the "Class to attend" dropdown.
+3. Select a class that costs more per session than the student's own class (e.g. a 2.5hr, $60/session class).
+4. Submit the request.
+5. Log in as teacher, find the makeup request (Dashboard's "Leave & Make Up requests" card, or the Roster detail panel from TC-17).
+6. Go to teacher Payments page.
+
+**Expected:**
+- Step 2: no Competition Team class appears in the dropdown, for any student.
+- Step 3: before submitting, a warning shows the additional fee (e.g. "$60 class costs more than $48 class — an additional $12 fee will apply"), computed as the flat difference between the two classes' per-session fee.
+- Step 5: the makeup request shows the same `+$12 fee` next to the requested class.
+- Step 6: a new pending payment appears for that student, pkgType "Makeup class fee", total $12, with a note naming both classes. Confirming it does **not** enroll the student in the makeup class (Roster enrollment count is unchanged) — it only marks the payment confirmed and adds it to the revenue ledger.
+- Repeat with a same-price or cheaper makeup class: no fee warning appears, no pending payment is created, and `makeup.fee` is 0.
+
+---
+
+## TC-19 · Roster: Day/Time shows regardless of how classId was stored
+
+**Requirement:** The Roster's Day/Time column must resolve correctly even if an enrollment record's `classId` was stored as a string while the class list's `id` is a number (or vice versa) — a type mismatch must not silently blank the field.
+
+**Steps:**
+1. In Firestore, find or create an `enrollments/{id}` doc where `classId` is stored as a string (e.g. `"9"`) matching a class whose `id` in `settings/main.classes` is the number `9`.
+2. Open the teacher Roster page and find that row.
+3. Open the Switch dialog for that row and check the "already enrolled in" exclusion works (the student's current class should not appear as a switch target even if its stored `classId` type differs from the class list's).
+
+**Expected:**
+- Step 2: Day/Time shows the real values (e.g. "周六 Sat" / "1:00pm–3:30pm"), not "—", and Category shows the real category badge instead of falling back to "kids".
+- Step 3: the student's current class is excluded from the "New class" dropdown regardless of the stored type of `classId`.
+
+---
+
+## TC-20 · Enrollment survives a class being edited or deleted later
+
+**Requirement:** An enrollment's Day/Time/Instructor/Category on the Roster must reflect what was true when the student enrolled, and must not go blank just because the class was later edited or removed from Configuration. Deleting a class with active enrollments must warn the teacher first.
+
+**Steps:**
+1. As a student, sign up for a class (or as teacher, confirm a class payment, or use Switch on an existing roster row) so a fresh `enrollments` doc is written.
+2. As teacher, go to Configuration and edit that class's day/time, or delete it entirely.
+3. Go back to Student roster and find that student's row.
+4. Separately: try deleting a class that still has enrolled students, without having made any enrollment changes first.
+
+**Expected:**
+- Step 3: Day/Time (and Category) still show the values that were true at enrollment time — unaffected by the edit or deletion in step 2. (This relies on `days`/`time`/`instructor`/`category`/`fee` being snapshotted onto the `enrollments` doc when it's written — check the doc in Firestore has these fields.)
+- Step 4: the delete confirmation names how many students are currently enrolled in that class and warns that their roster row's schedule will show "—" going forward, instead of the old generic "This cannot be undone" with no mention of affected students.
+- A class with zero enrollments still shows the plain confirmation with no warning text.

@@ -198,7 +198,7 @@ const DAY_OPTIONS = [
 
 const DEFAULT_SCHED = { frequency:'weekly', dayOfWeek:1, dayOfMonth:1 }
 
-export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester, emailConfig={}, setEmailConfig, summarySchedule={}, setSummarySchedule, summaryLastSent='', sendWeeklySummary }) {
+export default function Configuration({ classes, setClasses, teacherEmails=[], setTeacherEmails, semester={}, setSemester, archiveSemester, emailConfig={}, setEmailConfig, summarySchedule={}, setSummarySchedule, summaryLastSent='', sendWeeklySummary, enrollments=[] }) {
   // ── Semester state ──────────────────────────────────────────
   const [semDraft,    setSemDraft]    = useState(null)   // null=view, object=editing
   const [semFlash,    setSemFlash]    = useState(false)
@@ -228,7 +228,15 @@ export default function Configuration({ classes, setClasses, teacherEmails=[], s
     setEditingId(null); setEditDraft({})
   }
   function deleteClass(id) {
-    if (!window.confirm('Delete this class? This cannot be undone.')) return
+    // Deleting a class does not touch the enrollments collection — any
+    // student still enrolled keeps a classId that no longer resolves to a
+    // real class, so the Roster and CSV export can no longer show its
+    // schedule. Warn before that happens instead of silently orphaning it.
+    const count = enrollments.filter(e => String(e.classId) === String(id)).length
+    const msg = count > 0
+      ? `${count} student${count===1?' is':'s are'} currently enrolled in this class. Deleting it will NOT remove them from the roster, but its schedule will show as "—" there from now on since the class itself will be gone. This cannot be undone. Delete anyway?`
+      : 'Delete this class? This cannot be undone.'
+    if (!window.confirm(msg)) return
     setClasses(prev => prev.filter(c => c.id !== id))
   }
   function saveNewClass() {

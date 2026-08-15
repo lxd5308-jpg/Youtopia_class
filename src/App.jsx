@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { db, auth } from './config/firebase'
 import {
-  doc, collection, onSnapshot, setDoc, getDoc, addDoc,
+  doc, collection, onSnapshot, setDoc, getDoc, addDoc, deleteDoc,
   query, where,
 } from 'firebase/firestore'
 import { signOut, onAuthStateChanged } from 'firebase/auth'
@@ -31,6 +31,7 @@ const defaultStudent = () => ({
   enrolledSemesterName: '',
   enrolledSemesterEnd:  '',
   enrollmentHistory:    [],
+  classChangeLog:       [],
 })
 
 const defaultTeacher = () => ({
@@ -277,6 +278,7 @@ export default function App() {
           enrolledSemesterName: data.enrolledSemesterName ?? prev.enrolledSemesterName,
           enrolledSemesterEnd:  data.enrolledSemesterEnd  ?? prev.enrolledSemesterEnd,
           enrollmentHistory:    data.enrollmentHistory    ?? prev.enrollmentHistory,
+          classChangeLog:       data.classChangeLog       ?? prev.classChangeLog,
         }))
       }
       // Mark profile as loaded (whether doc exists or not)
@@ -469,6 +471,14 @@ export default function App() {
         studentName:  sd.studentName || '',
         pkgType:      'full',
         enrolledAt:   nowStr(),
+        // Snapshot the schedule at enrollment time so the Roster still shows
+        // it correctly if this class is later edited or deleted — a class
+        // deletion has no cascade cleanup, so a live-only lookup would go blank.
+        days:         cls.days       || '',
+        time:         cls.time       || '',
+        instructor:   cls.instructor || '',
+        category:     cls.category   || '',
+        fee:          cls.fee        ?? null,
       }, { merge: true }).catch(err => console.error('Enrollment record failed:', err))
     }
   }
@@ -535,6 +545,7 @@ export default function App() {
     // Add enrollment records (unique ID prevents duplicates)
     for (const item of classItems) {
       const enrollId = `${encoded}_${item.classId}`
+      const clsObj   = td.classes.find(c => c.id === item.classId)
       await setDoc(doc(db, 'enrollments', enrollId), {
         classId:      item.classId,
         className:    item.className,
@@ -542,6 +553,11 @@ export default function App() {
         studentEmail: studentInfo.email,
         pkgType:      item.pkgType,
         enrolledAt:   now,
+        days:         clsObj?.days       || '',
+        time:         clsObj?.time       || '',
+        instructor:   clsObj?.instructor || '',
+        category:     clsObj?.category   || '',
+        fee:          clsObj?.fee        ?? null,
       }, { merge: true })
     }
 
@@ -553,6 +569,81 @@ export default function App() {
         studentEmail: studentInfo.email,
       })
     }
+  }
+
+  // ── switchStudentClass (teacher moves a student to a different class) ──
+  // Package hours are not tracked per-class in this app (10-hour packs are
+  // generic, not tied to a classId), so switching only ever needs to move
+  // the enrolled slot itself — `enrolled` on the student doc and the
+  // matching `enrollments` record that the Roster / Messages / summary read.
+  async function switchStudentClass(studentEmail, studentName, fromClassId, toClassId, note = '') {
+    const encoded     = encEmail(studentEmail)
+    const studentRef  = doc(db, 'students', encoded)
+    const snap        = await getDoc(studentRef)
+    const existing    = snap.exists() ? snap.data() : defaultStudent()
+
+    const fromClass   = td.classes.find(c => c.id === fromClassId)
+    const toClass     = td.classes.find(c => c.id === toClassId)
+    const oldEnrollId = `${encoded}_${fromClassId}`
+    const oldSnap     = await getDoc(doc(db, 'enrollments', oldEnrollId))
+    const pkgType     = oldSnap.exists() ? (oldSnap.data().pkgType || 'full') : 'full'
+
+    const newEnrolled = [...new Set([...(existing.enrolled||[]).filter(id => id !== fromClassId), toClassId])]
+    const newPending  = (existing.pendingEnroll||[]).filter(id => id !== fromClassId)
+    const logEntry    = {
+      type: 'switch',
+      fromClassId, fromClassName: fromClass?.name || '',
+      toClassId,   toClassName:   toClass?.name || '',
+      date: nowStr(), note: note.trim(),
+    }
+    const newLog = [...(existing.classChangeLog||[]), logEntry]
+
+    await setDoc(studentRef, {
+      enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog,
+    }, { merge: true })
+
+    if (studentEmailRef.current === studentEmail) {
+      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog }))
+    }
+
+    await deleteDoc(doc(db, 'enrollments', oldEnrollId))
+    await setDoc(doc(db, 'enrollments', `${encoded}_${toClassId}`), {
+      classId: toClassId, className: toClass?.name || '',
+      studentEmail, studentName: existing.studentName || studentName || '',
+      pkgType, enrolledAt: nowStr(),
+      days:       toClass?.days       || '',
+      time:       toClass?.time       || '',
+      instructor: toClass?.instructor || '',
+      category:   toClass?.category   || '',
+      fee:        toClass?.fee        ?? null,
+    }, { merge: true })
+  }
+
+  // ── dropStudentClass (teacher withdraws a student from a class) ────────
+  async function dropStudentClass(studentEmail, studentName, classId, note = '') {
+    const encoded    = encEmail(studentEmail)
+    const studentRef = doc(db, 'students', encoded)
+    const snap       = await getDoc(studentRef)
+    const existing   = snap.exists() ? snap.data() : defaultStudent()
+
+    const cls        = td.classes.find(c => c.id === classId)
+    const newEnrolled = (existing.enrolled||[]).filter(id => id !== classId)
+    const newPending  = (existing.pendingEnroll||[]).filter(id => id !== classId)
+    const logEntry    = {
+      type: 'drop', fromClassId: classId, fromClassName: cls?.name || '',
+      date: nowStr(), note: note.trim(),
+    }
+    const newLog = [...(existing.classChangeLog||[]), logEntry]
+
+    await setDoc(studentRef, {
+      enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog,
+    }, { merge: true })
+
+    if (studentEmailRef.current === studentEmail) {
+      setSd(prev => ({ ...prev, enrolled: newEnrolled, pendingEnroll: newPending, classChangeLog: newLog }))
+    }
+
+    await deleteDoc(doc(db, 'enrollments', `${encoded}_${classId}`))
   }
 
   // ── editSessionDate ────────────────────────────────────────────
@@ -710,8 +801,18 @@ export default function App() {
   // Makeup requests are now auto-approved for immediate effect.
   // Teachers can review the log later for bulk actions.
   async function requestMakeup(leaveId, makeupData) {
-    const makeup = { ...makeupData, status: 'approved', autoApprovedAt: nowStr(), requestedAt: nowStr() }
-    const lid    = String(leaveId)
+    const lid       = String(leaveId)
+    const leaveSnap = await getDoc(doc(db, 'leaveRequests', lid))
+    const leaveData = leaveSnap.exists() ? leaveSnap.data() : {}
+
+    // Fee is the flat difference between the two classes' per-session price —
+    // computed here (not trusted from the client) so it can't be spoofed, and
+    // zero when the makeup class costs the same or less than the student's own.
+    const currentClass = td.classes.find(c => c.name === leaveData.className)
+    const newClass      = td.classes.find(c => c.name === makeupData.className)
+    const fee = Math.max(0, (newClass?.fee || 0) - (currentClass?.fee || 0))
+
+    const makeup = { ...makeupData, status: 'approved', autoApprovedAt: nowStr(), requestedAt: nowStr(), fee }
 
     await setDoc(doc(db, 'leaveRequests', lid), { makeup }, { merge: true })
 
@@ -721,6 +822,20 @@ export default function App() {
         r.id === leaveId ? { ...r, makeup } : r
       ),
     }))
+
+    // Fee gets filed as a pending payment so it goes through the same
+    // Zelle/Venmo/cash confirmation flow as every other charge. classId is
+    // deliberately omitted — enrollStudent() only enrolls items that carry a
+    // classId, and confirming this fee must never re-enroll the student.
+    if (fee > 0 && leaveData.studentEmail) {
+      await setDoc(doc(db, 'payments', `makeup_${lid}_${Date.now()}`), {
+        studentName:  leaveData.studentName  || makeupData.studentName || '',
+        studentEmail: leaveData.studentEmail,
+        items:  [{ classId: null, className: makeupData.className, pkgType: 'makeupFee', price: fee }],
+        method: '', note: `Makeup class fee: ${leaveData.className || 'current class'} → ${makeupData.className}`,
+        total:  fee, status: 'pending', submittedAt: nowStr(),
+      })
+    }
   }
 
   // ── resolveMakeup (teacher approves / declines makeup) ─────────
@@ -970,6 +1085,8 @@ export default function App() {
       pendingPayments={td.pendingPayments}   setPendingPayments={setPendingPayments}
       teacherLeaves={td.leaveRequests}       setTeacherLeaves={setTeacherLeaves}
       enrollments={td.enrollments}
+      switchStudentClass={switchStudentClass}
+      dropStudentClass={dropStudentClass}
       teacherSessionPacks={td.sessionPacks}
       teacherPayHistory={td.paymentHistory}  setTeacherPayHist={setTeacherPayHist}
       sentMessages={td.sentMessages}
