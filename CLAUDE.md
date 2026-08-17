@@ -17,6 +17,7 @@ All features and UI must work correctly on both **desktop** and **mobile web bro
 - [Review & Modification](skills/review-and-modification.md)
 - [Testing](skills/testing.md)
 - [Publish](skills/publish.md)
+- [Support](skills/support.md) ← follow this when a live user reports a problem
 - [Code Efficiency Review](skills/code-efficiency.md)
 - [Design Principles](skills/design-principles.md) ← read this before any UI or code change
 
