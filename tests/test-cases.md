@@ -629,3 +629,23 @@ Mark each ✅ pass / ❌ fail before deploying to Cloudflare.
 **Expected:**
 - Step 3: shows "No payment on file for this class" — neither the rejected nor the still-pending payment should be counted.
 - Step 4: after confirming, the dialog now shows the confirmed amount as paid.
+
+---
+
+## TC-30 · Roster: Switch dialog shows a price-difference nudge
+
+**Requirement:** Switching a student to a different-priced class is purely informational — the app never auto-charges or auto-refunds a switch — but the Switch dialog should surface the per-session fee difference and any amount already paid for the old class, so the teacher doesn't miss reconciling it manually in Payments.
+
+**Steps:**
+1. Log in as teacher, open Student roster.
+2. Find a student enrolled in Class A (note its $/session fee). Click **Switch**.
+3. Pick Class B (a different $/session fee) from the dropdown.
+4. Change the selection to a class with the *same* $/session fee as Class A.
+5. Repeat with a student who has a confirmed payment on file for Class A.
+
+**Expected:**
+- Step 3: a box appears below the dropdown showing "$A/session → $B/session (+$diff/session)" (or `-$diff` if cheaper), styled as a heads-up (orange), not an error.
+- Step 4: the box switches to neutral styling and reads "(same price)" — no diff shown.
+- Step 5: the box also shows "$X already paid for [Class A] — switching doesn't adjust this automatically; reconcile any difference in Payments."
+- No Firestore write happens from this box — it's a read-only preview. Confirming the switch does not create, modify, or refund any `payments` doc.
+- Works at 320px width without horizontal overflow.

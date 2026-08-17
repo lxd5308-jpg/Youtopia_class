@@ -78,6 +78,8 @@ When the user requests a fix or correction, extract the general principle behind
 
 - **A "money paid" total must filter to `confirmed`/`refunded` — never `pending` or `rejected`.** Roster's `paymentsFor()` (used by the Drop dialog and Class change history to show "$X paid for this class") originally summed every matching payment regardless of status, so a payment the teacher had *rejected* — money that was never actually received — got counted as paid, and a still-*pending* one (not yet confirmed) did too. Any aggregate that means "money that changed hands" needs an explicit status filter; don't assume a payment doc existing means it happened.
 
+- **An action that changes a student's class/plan without moving any money should surface a price comparison at decision time, not only after the fact in a log.** The Switch dialog only ever recorded *that* a switch happened (`classChangeLog`), with no signal that the new class might cost more or less — a teacher had to separately remember to check both classes' fees and reconcile in Payments. It now shows the old vs. new class's `fee`/session and any amount already paid for the old class right in the confirmation dialog, styled as a heads-up, not an error. This stays read-only/informational by design (see the no-payment-gateway and `calcPrice()`-is-a-default entries above) — it never computes or writes a balance, since the actual owed/refund amount depends on package type, discounts, and teacher judgment the dialog can't see. Any future action with the same shape (changes what a student is enrolled in/owed without an automatic charge or refund) should get the same kind of preview rather than relying on the teacher to cross-reference Payments from memory.
+
 ---
 
 ## Cross-platform

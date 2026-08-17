@@ -35,6 +35,7 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
       day:          e.days || cls?.days || '—',
       time:         e.time || cls?.time || '—',
       pkgType:      PKG_LABEL[e.pkgType] || e.pkgType,
+      fee:          e.fee ?? cls?.fee ?? null,
       enrolledAt:   e.enrolledAt,
       leaves,
       leavesCount:  leaves.length,
@@ -383,6 +384,26 @@ export default function Roster({ classes=[], enrollments=[], teacherLeaves=[], s
                     <option key={c.id} value={c.id}>{c.name} — {c.days} {c.time}</option>
                   ))}
                 </select>
+                {target && (() => {
+                  const toClass  = classes.find(c => String(c.id) === String(target))
+                  const fromFee  = action.fee
+                  const toFee    = toClass?.fee ?? null
+                  const feeDiff  = (fromFee != null && toFee != null) ? toFee - fromFee : null
+                  const payMatches = paymentsFor(action.studentEmail, action.className)
+                  const payTotal    = payMatches.reduce((s,m)=>s+m.price, 0)
+                  if (feeDiff == null && payTotal === 0) return null
+                  return (
+                    <div style={{fontSize:'var(--fs-xs)',color: feeDiff ? '#B25E14' : 'var(--color-text-secondary)',background: feeDiff ? 'rgba(244,123,32,0.08)' : 'var(--color-background-secondary)',border:`0.5px solid ${feeDiff ? 'rgba(244,123,32,0.25)' : 'var(--color-border-tertiary)'}`,borderRadius:'var(--r-sm)',padding:'8px 10px',marginTop:8,lineHeight:1.6}}>
+                      <i className="ti ti-cash" style={{marginRight:4}}/>
+                      {feeDiff != null && (
+                        <span>${fromFee}/session → ${toFee}/session{feeDiff !== 0 ? <strong> ({feeDiff>0?'+':''}${feeDiff}/session)</strong> : ' (same price)'}. </span>
+                      )}
+                      {payTotal > 0 && (
+                        <span>${payTotal} already paid for {action.className} — switching doesn't adjust this automatically; reconcile any difference in Payments.</span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             ) : (
               <div style={{marginBottom:'var(--sp-md)'}}>
